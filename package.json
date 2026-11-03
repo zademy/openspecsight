@@ -21,6 +21,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
+    "typecheck": "tsc -b",
     "lint:fix": "eslint . --fix",
     "test:unit": "vitest run",
     "test:e2e": "playwright test"

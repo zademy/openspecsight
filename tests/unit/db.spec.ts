@@ -158,4 +158,49 @@ describe('scenarios_fts sync', () => {
 
     expect(db.all(sql`SELECT rowid FROM scenarios_fts`)).toHaveLength(0)
   })
+
+  test('re-indexes scenarios when the owning feature is renamed', () => {
+    const db = getDB()
+
+    const project = db.insert(projects).values({
+      name: 'Widget Platform',
+      description: 'The widget platform product spec',
+      createdAt: '2026-11-03T00:00:00.000Z',
+    }).returning().get()
+
+    const feature = db.insert(features).values({
+      projectId: project.id,
+      parentId: null,
+      name: 'Login',
+      description: 'Authentication flows',
+      sortOrder: 1,
+      source: 'ai',
+    }).returning().get()
+
+    const scenario = db.insert(scenarios).values({
+      featureId: feature.id,
+      // No token overlapping the feature name, so MATCH below hits feature_name only.
+      context: 'a registered user on the sign-in page',
+      action: 'submits correct credentials',
+      outcome: 'the user is signed in',
+      category: 'happy',
+      code: 'SC-001',
+      sortOrder: 0,
+      source: 'ai',
+    }).returning().get()
+
+    const before = db.all(sql`SELECT rowid, feature_name FROM scenarios_fts WHERE scenarios_fts MATCH ${'login'}`)
+    expect(before).toHaveLength(1)
+    expect(before[0]).toMatchObject({ rowid: scenario.id, feature_name: 'Login' })
+
+    db.update(features)
+      .set({ name: 'Authentication' })
+      .where(eq(features.id, feature.id))
+      .run()
+
+    expect(db.all(sql`SELECT rowid FROM scenarios_fts WHERE scenarios_fts MATCH ${'login'}`)).toHaveLength(0)
+    const renamed = db.all(sql`SELECT rowid, feature_name FROM scenarios_fts WHERE scenarios_fts MATCH ${'authentication'}`)
+    expect(renamed).toHaveLength(1)
+    expect(renamed[0]).toMatchObject({ rowid: scenario.id, feature_name: 'Authentication' })
+  })
 })

@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import Database from 'better-sqlite3'
+import SQLite from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
@@ -41,11 +41,23 @@ END;
 CREATE TRIGGER IF NOT EXISTS scenarios_fts_delete AFTER DELETE ON scenarios BEGIN
   DELETE FROM scenarios_fts WHERE rowid = old.id;
 END;
+
+-- The insert/update triggers copy features.name into feature_name at write
+-- time, so a feature rename would leave the index stale; re-index every
+-- scenario of the renamed feature.
+CREATE TRIGGER IF NOT EXISTS features_fts_rename AFTER UPDATE OF name ON features BEGIN
+  DELETE FROM scenarios_fts
+  WHERE rowid IN (SELECT id FROM scenarios WHERE featureId = old.id);
+  INSERT INTO scenarios_fts (rowid, context, action, outcome, feature_name)
+  SELECT s.id, s.context, s.action, s.outcome, new.name
+  FROM scenarios s
+  WHERE s.featureId = new.id;
+END;
 `
 
 interface DBHandle {
   db: Database
-  sqlite: Database.Database
+  sqlite: SQLite.Database
 }
 
 let handle: DBHandle | null = null
@@ -86,7 +98,7 @@ function createDB(): DBHandle {
     mkdirSync(dirname(path), { recursive: true })
   }
 
-  const sqlite = new Database(path)
+  const sqlite = new SQLite(path)
   const db = drizzle(sqlite, { schema })
 
   migrate(db, { migrationsFolder: fileURLToPath(new URL('./migrations/', import.meta.url)) })
