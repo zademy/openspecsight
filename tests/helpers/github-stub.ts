@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 /**
  * Minimal fixture-driven stub of the GitHub REST API for local e2e runs.
  *
- * It listens on a fixed port bound to loopback and answers every unmatched
+ * It listens on loopback (port 9876 by default, overridable for tests) and answers every unmatched
  * request with GitHub's 404 JSON shape. Later tasks register fixture-backed
  * routes via `registerGithubRoutes` so tests can exercise real flows.
  */
@@ -78,10 +78,17 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   let extraHeaders: Record<string, string> = {}
 
   if (route) {
-    const response = await route.handler(req)
-    status = response.status ?? 200
-    body = response.body ?? {}
-    extraHeaders = response.headers ?? {}
+    try {
+      const response = await route.handler(req)
+      status = response.status ?? 200
+      body = response.body ?? {}
+      extraHeaders = response.headers ?? {}
+    } catch (err) {
+      // A failing handler must answer with 500 JSON instead of escaping as an
+      // unhandled rejection, which would crash the test-runner process.
+      status = 500
+      body = { message: 'stub error', error: String(err) }
+    }
   }
 
   res.writeHead(status, {
@@ -91,21 +98,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   res.end(JSON.stringify(body))
 }
 
-/** Start the stub on 127.0.0.1:9876. Throws if it is already running. */
-export function startGithubStub(): Promise<GithubStubHandle> {
+/** Options for `startGithubStub`. */
+export interface GithubStubOptions {
+  /** Port to listen on; defaults to the fixed 9876. Tests override it to avoid collisions. */
+  port?: number
+}
+
+/** Start the stub on 127.0.0.1 (port 9876 by default, overridable for tests). Throws if already running. */
+export function startGithubStub(options: GithubStubOptions = {}): Promise<GithubStubHandle> {
   if (server) {
     return Promise.reject(new Error('GitHub stub is already running'))
   }
 
+  const port = options.port ?? PORT
   const instance = createServer((req, res) => {
     void handleRequest(req, res)
   })
 
   return new Promise((resolve, reject) => {
     instance.once('error', reject)
-    instance.listen(PORT, HOST, () => {
+    instance.listen(port, HOST, () => {
       server = instance
-      resolve({ host: HOST, port: PORT, baseUrl: `http://${HOST}:${PORT}` })
+      resolve({ host: HOST, port, baseUrl: `http://${HOST}:${port}` })
     })
   })
 }
