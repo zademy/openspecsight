@@ -1,0 +1,14 @@
+node_modules/
+.nuxt/
+.output/
+data/
+.env
+.env.*
+!.env.example
+.playwright-mcp/
+*.png
+.superpowers/
+dist/
+test-results/
+playwright-report/
+.DS_Store
