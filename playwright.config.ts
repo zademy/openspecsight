@@ -10,10 +10,14 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'pnpm dev',
+    // Production build instead of `pnpm dev`: the dev server's request bridge
+    // can drop a JSON body that arrives mid-SSR-render (readBody then hangs and
+    // pins the whole server), which flaked automated logins. Production Nitro
+    // serves requests on a plain http server and does not use that bridge.
+    command: 'pnpm build && pnpm preview',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 300_000,
     env: {
       LLM_MOCK: 'true',
       AUTH_PASSWORD: 'test-pass',
