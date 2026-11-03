@@ -12,3 +12,4 @@ dist/
 test-results/
 playwright-report/
 .DS_Store
+.worktrees/
