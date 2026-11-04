@@ -1,11 +1,12 @@
 /**
- * Redirects unauthenticated page visits to /login (skipping /login itself),
+ * Redirects unauthenticated page visits to /login (skipping /login itself
+ * and the public /notes/ reader, which has no app chrome to guard),
  * carrying the requested path in the `redirect` query so the login page can
  * return the operator where they started. API routes are not page routes —
  * they are guarded server-side by server/middleware/01.auth.ts.
  */
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (to.path === '/login') {
+  if (to.path === '/login' || to.path.startsWith('/notes/')) {
     return
   }
 

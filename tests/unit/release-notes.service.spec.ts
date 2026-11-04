@@ -18,15 +18,19 @@ import {
   createVoice,
   deleteVoice,
   draftNote,
+  getPublicNote,
+  getReleaseNote,
   listReleaseNotes,
   listVoices,
   NoteInProgressError,
   NoteScopeEmptyError,
+  publishReleaseNote,
   resolveNoteSelection,
   RevisionScopeMismatchError,
   runNoteDraft,
   setVoiceDefault,
   startNoteDraft,
+  unpublishReleaseNote,
   VoiceLimitReachedError,
   VoiceNameTakenError,
   VoiceNotFoundError,
@@ -496,5 +500,90 @@ describe('runNoteDraft', () => {
     })
 
     expect(getDB().select().from(releaseNotes).where(eq(releaseNotes.id, noteId)).get()?.title).toBe('Handled note')
+  })
+})
+
+describe('publishing and the public page', () => {
+  /** One scripted draft over the seeded sync release, with its id and slug. */
+  async function draftedNote(): Promise<{ id: number, slug: string }> {
+    const releaseId = seedSyncRelease()
+    const id = await draftNote(projectId, { releaseId }, { llm: scriptedLlm({ title: 'Tighter sign-in checks', blocks: [
+      { type: 'heading', text: 'What changed' },
+      { type: 'paragraph', text: 'This release tightens how admin sign-in works.' },
+    ] }) })
+    const row = getDB().select().from(releaseNotes).where(eq(releaseNotes.id, id)).get()!
+    return { id, slug: row.slug }
+  }
+
+  test('the draft detail resolves blocks, publish state and the voice name', async () => {
+    createVoice(projectId, { name: 'Changelog', description: 'Terse and factual.' })
+    const voice = listVoices(projectId)[0]!
+    const releaseId = seedSyncRelease()
+    const id = await draftNote(projectId, { releaseId, voiceId: voice.id }, { llm: scriptedLlm({ title: 'Drafted', blocks: [{ type: 'heading', text: 'x' }] }) })
+
+    const note = getReleaseNote(id)
+    expect(note).not.toBeNull()
+    expect(note!.voiceName).toBe('Changelog')
+    expect(note!.published).toBe(false)
+    expect(note!.publishedAt).toBeNull()
+    expect(note!.blocks).toEqual([{ type: 'heading', text: 'x' }])
+
+    // Deleting the voice nulls the recorded voice; the note reads as the
+    // implicit Default voice (voiceName null).
+    deleteVoice(projectId, voice.id)
+    expect(getReleaseNote(id)!.voiceName).toBeNull()
+    expect(getReleaseNote(424242)).toBeNull()
+  })
+
+  test('a draft and an unknown slug 404; publishing exposes exactly the public shape', async () => {
+    const { id, slug } = await draftedNote()
+
+    expect(getPublicNote(slug)).toBeNull()
+    expect(getPublicNote('no-such-note')).toBeNull()
+
+    const published = publishReleaseNote(id)
+    expect(published).toEqual({ slug })
+
+    const note = getPublicNote(slug)
+    expect(note).not.toBeNull()
+    // Exactly the public shape: projectId, voiceId, range and slug stay inside.
+    expect(Object.keys(note!).sort()).toEqual(['blocks', 'publishedAt', 'title'])
+    expect(note!.title).toBe('Tighter sign-in checks')
+    expect(note!.blocks).toEqual([
+      { type: 'heading', text: 'What changed' },
+      { type: 'paragraph', text: 'This release tightens how admin sign-in works.' },
+    ])
+    expect(note!.publishedAt).toBeTruthy()
+  })
+
+  test('publishing is idempotent: republishing keeps the original publishedAt', async () => {
+    const { id, slug } = await draftedNote()
+
+    publishReleaseNote(id)
+    const first = getPublicNote(slug)!
+    publishReleaseNote(id)
+    expect(getPublicNote(slug)).toEqual(first)
+    expect(listReleaseNotes(projectId)[0]!.published).toBe(true)
+  })
+
+  test('unpublishing returns the note to draft and the public page 404s again', async () => {
+    const { id, slug } = await draftedNote()
+    publishReleaseNote(id)
+    expect(getPublicNote(slug)).not.toBeNull()
+
+    expect(unpublishReleaseNote(id)).toEqual({ slug })
+    expect(getPublicNote(slug)).toBeNull()
+
+    const summary = listReleaseNotes(projectId)[0]!
+    expect(summary.published).toBe(false)
+
+    // Republishing after a draft gap stamps a fresh publication date.
+    publishReleaseNote(id)
+    expect(getPublicNote(slug)!.publishedAt).toBeTruthy()
+  })
+
+  test('publish and unpublish an unknown note answer null', async () => {
+    expect(publishReleaseNote(424242)).toBeNull()
+    expect(unpublishReleaseNote(424242)).toBeNull()
   })
 })

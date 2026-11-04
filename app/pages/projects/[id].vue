@@ -22,6 +22,7 @@ const items = computed<NavigationMenuItem[]>(() => [
   { label: 'Product map', to: `/projects/${projectId}/map`, active: route.path.startsWith(`/projects/${projectId}/map`) },
   { label: 'Ask', to: `/projects/${projectId}/ask`, active: route.path.startsWith(`/projects/${projectId}/ask`) },
   { label: 'Changes', to: `/projects/${projectId}/changes`, active: route.path.startsWith(`/projects/${projectId}/changes`) },
+  { label: 'Release notes', to: `/projects/${projectId}/release-notes`, active: route.path.startsWith(`/projects/${projectId}/release-notes`) },
   { label: 'Digests', to: `/projects/${projectId}/digests`, active: route.path.startsWith(`/projects/${projectId}/digests`) },
 ])
 </script>

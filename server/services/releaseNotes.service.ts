@@ -2,11 +2,15 @@ import { randomBytes } from 'node:crypto'
 import { and, desc, eq, inArray } from 'drizzle-orm'
 import { getDB } from '../db/client'
 import { features, jobs, releaseNotes, releases, scenarioRevisions, voices } from '../db/schema'
-import { CreateReleaseNoteSchema, NoteDraftSchema } from '../../shared/schemas'
+import { ContentBlocksSchema, CreateReleaseNoteSchema, NoteDraftSchema } from '../../shared/schemas'
 import type {
+  ContentBlocks,
   CreateReleaseNoteInput,
   CreateVoiceInput,
   NoteDraft,
+  PublicNote,
+  PublishResult,
+  ReleaseNoteDetail,
   ReleaseNoteSummary,
   RevisionKind,
   Voice,
@@ -455,4 +459,113 @@ export function listReleaseNotes(projectId: number): ReleaseNoteSummary[] {
     .orderBy(desc(releaseNotes.createdAt), desc(releaseNotes.id))
     .all()
     .map((row) => ({ ...row, published: row.published === 1 }))
+}
+
+// --- Reading one note, publishing, and the public reader ---
+
+/**
+ * Parses stored blocks; null when the JSON has drifted from
+ * ContentBlocksSchema. The only writer stores a schema-validated draft, so a
+ * parse failure means a corrupt row — surfaced as a 404 upstream, the same
+ * defensive shape as the digest service's block parsing.
+ */
+function parseBlocks(raw: string): ContentBlocks | null {
+  try {
+    const parsed = ContentBlocksSchema.safeParse(JSON.parse(raw))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+/** One note with its parsed blocks and resolved voice name; null when unknown or corrupt. */
+export function getReleaseNote(noteId: number): ReleaseNoteDetail | null {
+  const row = getDB().select({ note: releaseNotes, voiceName: voices.name })
+    .from(releaseNotes)
+    .leftJoin(voices, eq(releaseNotes.voiceId, voices.id))
+    .where(eq(releaseNotes.id, noteId))
+    .get()
+  if (!row) {
+    return null
+  }
+  const blocks = parseBlocks(row.note.blocksJson)
+  if (!blocks) {
+    return null
+  }
+  return {
+    id: row.note.id,
+    projectId: row.note.projectId,
+    title: row.note.title,
+    slug: row.note.slug,
+    rangeFrom: row.note.rangeFrom,
+    rangeTo: row.note.rangeTo,
+    voiceId: row.note.voiceId,
+    voiceName: row.voiceName,
+    blocks,
+    published: row.note.published === 1,
+    createdAt: row.note.createdAt,
+    publishedAt: row.note.publishedAt,
+  }
+}
+
+/**
+ * The public reader: only published notes, projected to exactly
+ * { title, publishedAt, blocks }. Drafts and unknown slugs both answer null —
+ * the API turns that into one shared 404, leaving no oracle for draft slugs.
+ */
+export function getPublicNote(slug: string): PublicNote | null {
+  const row = getDB().select()
+    .from(releaseNotes)
+    .where(and(eq(releaseNotes.slug, slug), eq(releaseNotes.published, 1)))
+    .get()
+  if (!row || row.publishedAt === null) {
+    return null
+  }
+  const blocks = parseBlocks(row.blocksJson)
+  if (!blocks) {
+    return null
+  }
+  return { title: row.title, publishedAt: row.publishedAt, blocks }
+}
+
+/**
+ * Publishes the note: flips it public and stamps publishedAt once.
+ * Idempotent — republishing an already-published note touches nothing and
+ * returns the same slug. Returns null for an unknown note.
+ */
+export function publishReleaseNote(noteId: number): PublishResult | null {
+  const note = getDB().select({ slug: releaseNotes.slug, published: releaseNotes.published })
+    .from(releaseNotes)
+    .where(eq(releaseNotes.id, noteId))
+    .get()
+  if (!note) {
+    return null
+  }
+  if (note.published !== 1) {
+    getDB().update(releaseNotes)
+      .set({ published: 1, publishedAt: new Date().toISOString() })
+      .where(eq(releaseNotes.id, noteId))
+      .run()
+  }
+  return { slug: note.slug }
+}
+
+/**
+ * Returns the note to draft: the public page 404s again and publishedAt is
+ * forgotten, so republishing stamps a fresh date. Returns null for an
+ * unknown note.
+ */
+export function unpublishReleaseNote(noteId: number): PublishResult | null {
+  const note = getDB().select({ slug: releaseNotes.slug })
+    .from(releaseNotes)
+    .where(eq(releaseNotes.id, noteId))
+    .get()
+  if (!note) {
+    return null
+  }
+  getDB().update(releaseNotes)
+    .set({ published: 0, publishedAt: null })
+    .where(eq(releaseNotes.id, noteId))
+    .run()
+  return { slug: note.slug }
 }

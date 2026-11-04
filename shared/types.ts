@@ -408,3 +408,38 @@ export interface ReleaseNoteSummary {
   published: boolean
   createdAt: string
 }
+
+/** GET /api/release-notes/:id — one note with its parsed blocks, drafts included. */
+export interface ReleaseNoteDetail {
+  id: number
+  projectId: number
+  title: string
+  slug: string
+  rangeFrom: string
+  rangeTo: string
+  /** The recorded voice; null drafts under the implicit Default voice. */
+  voiceId: number | null
+  /** Resolved voice name; null reads as "Default voice". */
+  voiceName: string | null
+  blocks: ContentBlocks
+  published: boolean
+  createdAt: string
+  /** Stamped when the note went public; null while a draft. */
+  publishedAt: string | null
+}
+
+/** POST /api/release-notes/:id/publish — the slug the note is public at. */
+export interface PublishResult {
+  slug: string
+}
+
+/**
+ * GET /api/notes/public/:slug — a published note and nothing else. Deliberately
+ * narrow: no project, voice or draft fields, and unknown slugs answer the same
+ * 404 as unpublished ones, so the URL space leaks nothing about drafts.
+ */
+export interface PublicNote {
+  title: string
+  publishedAt: string
+  blocks: ContentBlocks
+}
