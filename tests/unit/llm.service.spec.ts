@@ -201,7 +201,8 @@ describe('real mode (LLM_MOCK=false)', () => {
     expect(generate).toHaveBeenCalledOnce()
     expect(generate.mock.calls[0]?.[0]?.model).toBe(model)
     expect(generate.mock.calls[0]?.[0]?.schema).toBe(FeatureInventorySchema)
-    expect(generate.mock.calls[0]?.[0]?.prompt).toBe('inventory prompt')
+    expect(generate.mock.calls[0]?.[0]?.prompt).toContain('inventory prompt')
+    expect(generate.mock.calls[0]?.[0]?.prompt).toContain('Respond ONLY with a single JSON')
   })
 
   test('accepts and ignores the per-project opts', async () => {
@@ -215,7 +216,8 @@ describe('real mode (LLM_MOCK=false)', () => {
     const result = await client.generate('feature-inventory', FeatureInventorySchema, 'inventory prompt', { projectId: 42 })
 
     expect(result).toEqual(inventoryPayload)
-    expect(generate.mock.calls[0]?.[0]?.prompt).toBe('inventory prompt')
+    expect(generate.mock.calls[0]?.[0]?.prompt).toContain('inventory prompt')
+    expect(generate.mock.calls[0]?.[0]?.prompt).toContain('Respond ONLY with a single JSON')
   })
 })
 
@@ -276,13 +278,13 @@ describe('weak-endpoint structured-output hardening', () => {
     const { repairStructuredText } = await import('../../server/services/llm.service')
     const repair = repairStructuredText(FeatureInventorySchema)
 
-    const fenced = await repair(new Error('x'), { text: '```json\n[{"name":"A","description":"d","files":["a.ts"]}]\n```' })
-    expect(JSON.parse(fenced)).toEqual({ features: [{ name: 'A', description: 'd', files: ['a.ts'] }] })
+    const fenced = await repair({ text: '```json\n[{"name":"A","description":"d","files":["a.ts"]}]\n```' })
+    expect(JSON.parse(fenced as string)).toEqual({ features: [{ name: 'A', description: 'd', files: ['a.ts'] }] })
 
-    const bare = await repair(new Error('x'), { text: '[{"name":"B","description":"d","files":[]}]' })
-    expect(JSON.parse(bare)).toEqual({ features: [{ name: 'B', description: 'd', files: [] }] })
+    const bare = await repair({ text: '[{"name":"B","description":"d","files":[]}]' })
+    expect(JSON.parse(bare as string)).toEqual({ features: [{ name: 'B', description: 'd', files: [] }] })
 
-    const alreadyFine = await repair(new Error('x'), { text: '{"features":[]}' })
-    expect(JSON.parse(alreadyFine)).toEqual({ features: [] })
+    const alreadyFine = await repair({ text: '{"features":[]}' })
+    expect(JSON.parse(alreadyFine as string)).toEqual({ features: [] })
   })
 })
