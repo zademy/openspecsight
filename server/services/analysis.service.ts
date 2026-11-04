@@ -2,12 +2,13 @@ import { asc, eq, inArray } from 'drizzle-orm'
 import { getDB, type Database } from '../db/client'
 import { analyses, annotations, connections, featureFiles, features, flows, repositories, scenarios } from '../db/schema'
 import { ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema } from '../../shared/schemas'
-import type { Connections, FeatureInventory, FeatureScenarios, FlowGraph, ScenarioCategory } from '../../shared/types'
+import type { FeatureInventory, FeatureScenarios, ScenarioCategory } from '../../shared/types'
 import { decryptSecret } from '../utils/crypto'
 import { createGithubService, type GithubService } from './github.service'
 import { createLlmClient, type LlmClient } from './llm.service'
 import { buildFeatureDigest, buildSourceDigest } from './analysis/digest'
 import { featureSlug, filterCodeFiles } from './analysis/paths'
+import { storeConnections, upsertFlow } from './analysis/store-maps'
 
 /**
  * The initial-analysis pipeline: turn a repository into the product spec.
@@ -146,7 +147,7 @@ async function analyze(analysisId: number, projectId: number, deps: AnalysisDeps
 
   setStep(92, 'connections')
   const generatedConnections = await llm.generate('connections', ConnectionsSchema, buildConnectionsDigest(inventory))
-  const { inserted: connectionCount, skipped: connectionsSkipped } = storeConnections(projectId, idsByName, generatedConnections)
+  const { inserted: connectionCount, skipped: connectionsSkipped } = storeConnections(getDB(), projectId, idsByName, generatedConnections.connections)
 
   let flowCount = 0
   for (const [index, feature] of topLevel.entries()) {
@@ -158,7 +159,7 @@ async function analyze(analysisId: number, projectId: number, deps: AnalysisDeps
         FlowGraphSchema,
         buildFlowDigest(feature.name, feature.description, featureId),
       )
-      upsertFlow(featureId, graph)
+      upsertFlow(getDB(), featureId, graph)
       flowCount += 1
     }
   }
@@ -352,31 +353,6 @@ function buildConnectionsDigest(inventory: FeatureInventory): string {
 }
 
 /**
- * Stores the generated relations, dropping everything the map cannot draw:
- * self-links, unknown feature names and repeated (from, to, type) triples.
- * Returns the kept and dropped counts for the stats badge.
- */
-function storeConnections(projectId: number, idsByName: Map<string, number>, generated: Connections): { inserted: number, skipped: number } {
-  const db = getDB()
-  const seen = new Set<string>()
-  let inserted = 0
-  let skipped = 0
-  for (const connection of generated.connections) {
-    const fromId = idsByName.get(connection.fromFeature)
-    const toId = idsByName.get(connection.toFeature)
-    const key = `${connection.fromFeature}|${connection.toFeature}|${connection.type}`
-    if (fromId === undefined || toId === undefined || fromId === toId || seen.has(key)) {
-      skipped += 1
-      continue
-    }
-    seen.add(key)
-    db.insert(connections).values({ projectId, fromFeatureId: fromId, toFeatureId: toId, type: connection.type }).run()
-    inserted += 1
-  }
-  return { inserted, skipped }
-}
-
-/**
  * Prompt for one feature's flow graph: the stored scenarios carry their final
  * codes (HP-1 / ED-1 / ER-1…), so generated nodes can reference them — manual
  * scenarios included, a flow may legitimately run through operator territory.
@@ -397,14 +373,6 @@ function buildFlowDigest(name: string, description: string, featureId: number): 
     '',
     'Draw the feature\'s control flow: a start node, concrete steps, at least one decision with labeled branches, the error paths, and an end node. Set scenarioCode on the nodes that implement a bracketed scenario.',
   ].join('\n')
-}
-
-/** Upsert keyed by the flow's unique featureId: one graph per feature. */
-function upsertFlow(featureId: number, graph: FlowGraph): void {
-  const graphJson = JSON.stringify(graph)
-  getDB().insert(flows).values({ featureId, graphJson })
-    .onConflictDoUpdate({ target: flows.featureId, set: { graphJson } })
-    .run()
 }
 
 /** Numeric suffix of a scenario code (`HP-12` → 12); 0 for alien shapes. */

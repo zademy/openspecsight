@@ -16,6 +16,7 @@ import type { ScenarioCategory, SyncFeatureUpdate, SyncUpdate } from '../../shar
 import { decryptSecret } from '../utils/crypto'
 import { CODE_PREFIX } from './analysis.service'
 import { featureSlug } from './analysis/paths'
+import { deleteConnectionsTouching, storeConnections, upsertFlow } from './analysis/store-maps'
 import { enqueueJob } from './jobs.service'
 import { createGithubService, type GithubService } from './github.service'
 import { createLlmClient, type LlmClient } from './llm.service'
@@ -44,7 +45,10 @@ import { projectExists } from './projects.service'
  *     - `gone` deletes `source='ai'` rows together with their annotations;
  *     - any match against a `source='manual'` scenario NEVER touches the row
  *       (spec §6.3): the proposed outcome is stored as a `scenarioRevisions`
- *       row with `state='proposed'` for the operator to review.
+ *       row with `state='proposed'` for the operator to review;
+ *     - an update payload may carry a redrawn `flow` and a refreshed
+ *       `connections` set for its feature; both land in the same transaction
+ *       and a payload without them leaves the stored maps untouched.
  *  5. `done` — stats land in `statsJson`.
  *
  * Errors — GitHub failures, schema-invalid LLM output — mark the analysis
@@ -208,7 +212,7 @@ async function syncRun(analysisId: number, projectId: number, deps: SyncDeps): P
     return { releaseId: null }
   }
   if (head.sha === repository.lastSyncedSha) {
-    finishSync(analysisId, 100, 'up-to-date', { features: 0, scenarios: 0, files: 0 })
+    finishSync(analysisId, 100, 'up-to-date', { features: 0, scenarios: 0, files: 0, connections: 0, connectionsSkipped: 0, flows: 0 })
     return { releaseId: null }
   }
 
@@ -261,7 +265,16 @@ async function syncRun(analysisId: number, projectId: number, deps: SyncDeps): P
     committedAt: head.committedAt,
   }
 
-  const result = db.transaction((tx): { releaseId: number, revisions: number } => {
+  const idsByName = new Map(
+    db.select().from(features).where(eq(features.projectId, projectId)).all().map((feature) => [feature.name, feature.id]),
+  )
+  const result = db.transaction((tx): {
+    releaseId: number
+    revisions: number
+    connections: number
+    connectionsSkipped: number
+    flows: number
+  } => {
     const release = tx.insert(releases).values({
       projectId,
       repositoryId: repository.id,
@@ -272,20 +285,59 @@ async function syncRun(analysisId: number, projectId: number, deps: SyncDeps): P
     for (const [featureId, updates] of updatesByFeature) {
       revisions += applyFeatureUpdates(tx, featureId, updates, release.id)
     }
+    const maps = refreshFeatureMaps(tx, projectId, idsByName, updatesByFeature)
     tx.update(repositories)
       .set({ lastSyncedSha: head.sha })
       .where(eq(repositories.id, repository.id))
       .run()
 
-    return { releaseId: release.id, revisions }
+    return { releaseId: release.id, revisions, ...maps }
   })
 
   finishSync(analysisId, 100, 'done', {
     features: updatesByFeature.size,
     scenarios: result.revisions,
     files: changedFiles.length,
+    connections: result.connections,
+    connectionsSkipped: result.connectionsSkipped,
+    flows: result.flows,
   })
   return { releaseId: result.releaseId }
+}
+
+/**
+ * Applies the payload-driven map refresh inside the sync transaction: a
+ * feature whose update carries a redrawn `flow` gets its graph upserted, one
+ * carrying `connections` gets every stored relation touching it replaced by
+ * the payload's set — run through the same self/unknown/duplicate skip logic
+ * as the analysis. A payload without those fields leaves the stored maps of
+ * its feature untouched, so unaffected features provably never move.
+ */
+function refreshFeatureMaps(
+  tx: Transaction,
+  projectId: number,
+  idsByName: Map<string, number>,
+  updatesByFeature: Map<number, SyncFeatureUpdate[]>,
+): { connections: number, connectionsSkipped: number, flows: number } {
+  let connections = 0
+  let connectionsSkipped = 0
+  let flows = 0
+  for (const [featureId, updates] of updatesByFeature) {
+    // Several updates can land on one feature (LLM-flagged extras); the newest wins.
+    const flow = [...updates].reverse().find((update) => update.flow !== undefined)?.flow
+    if (flow) {
+      upsertFlow(tx, featureId, flow)
+      flows += 1
+    }
+    const refreshed = [...updates].reverse().find((update) => update.connections !== undefined)?.connections
+    if (refreshed) {
+      deleteConnectionsTouching(tx, featureId)
+      const { inserted, skipped } = storeConnections(tx, projectId, idsByName, refreshed)
+      connections += inserted
+      connectionsSkipped += skipped
+    }
+  }
+  return { connections, connectionsSkipped, flows }
 }
 
 /**
@@ -509,7 +561,7 @@ function finishSync(
   analysisId: number,
   progress: number,
   step: string,
-  stats: { features: number, scenarios: number, files: number },
+  stats: { features: number, scenarios: number, files: number, connections: number, connectionsSkipped: number, flows: number },
 ): void {
   getDB().update(analyses).set({
     status: 'done',

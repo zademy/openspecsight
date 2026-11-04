@@ -45,33 +45,6 @@ export const FeatureScenariosSchema = z.object({
 })
 
 /**
- * Incremental spec update produced by a sync: per-feature scenario revisions
- * against the previously stored spec.
- */
-export const SyncUpdateSchema = z.object({
-  title: z.string(),
-  category: z.string(),
-  highlight: z.boolean(),
-  summary: z.string(),
-  featureUpdates: z.array(
-    z.object({
-      featureName: z.string(),
-      changedFiles: z.array(z.string()),
-      scenarios: z.array(
-        z.object({
-          kind: RevisionKindSchema,
-          matchCode: z.string().optional(),
-          context: z.string(),
-          action: z.string(),
-          outcome: z.string(),
-          category: ScenarioCategorySchema,
-        }),
-      ),
-    }),
-  ),
-})
-
-/**
  * Flow diagram of one feature as produced by the analysis: nodes are steps
  * from start to end, edges the transitions between them; scenarioCode
  * optionally links a node back to the scenario (SC-xxx) it was built from.
@@ -103,17 +76,49 @@ export const connectionTypes = ['leads_to', 'triggers', 'depends_on', 'shares_da
 
 export const ConnectionTypeSchema = z.enum(connectionTypes)
 
+/** One directed relation; names reference the stored features verbatim. */
+export const ConnectionEdgeSchema = z.object({
+  fromFeature: z.string(),
+  toFeature: z.string(),
+  type: ConnectionTypeSchema,
+})
+
 /**
  * Feature-to-feature relations as produced by the analysis. Names reference
  * the inventory's features; the pipeline drops unknown names, self-links and
  * duplicate triples before storing, so the schema itself stays lenient.
  */
 export const ConnectionsSchema = z.object({
-  connections: z.array(
+  connections: z.array(ConnectionEdgeSchema),
+})
+
+/**
+ * Incremental spec update produced by a sync: per-feature scenario revisions
+ * against the previously stored spec. `connections` and `flow` are optional
+ * map refreshes for the touched feature — absent fields leave the stored maps
+ * untouched, and pre-map payloads keep validating.
+ */
+export const SyncUpdateSchema = z.object({
+  title: z.string(),
+  category: z.string(),
+  highlight: z.boolean(),
+  summary: z.string(),
+  featureUpdates: z.array(
     z.object({
-      fromFeature: z.string(),
-      toFeature: z.string(),
-      type: ConnectionTypeSchema,
+      featureName: z.string(),
+      changedFiles: z.array(z.string()),
+      scenarios: z.array(
+        z.object({
+          kind: RevisionKindSchema,
+          matchCode: z.string().optional(),
+          context: z.string(),
+          action: z.string(),
+          outcome: z.string(),
+          category: ScenarioCategorySchema,
+        }),
+      ),
+      connections: z.array(ConnectionEdgeSchema).optional(),
+      flow: FlowGraphSchema.optional(),
     }),
   ),
 })

@@ -43,7 +43,42 @@
           "outcome": "the foreign-key cookie rejection was removed together with the legacy token endpoint",
           "category": "error"
         }
-      ]
+      ],
+      "connections": [
+        { "fromFeature": "Authentication", "toFeature": "Tasks", "type": "authenticates" },
+        { "fromFeature": "Authentication", "toFeature": "Tasks", "type": "notifies" },
+        { "fromFeature": "Authentication", "toFeature": "Authentication", "type": "triggers" },
+        { "fromFeature": "Notifications", "toFeature": "Authentication", "type": "notifies" },
+        { "fromFeature": "Authentication", "toFeature": "Tasks", "type": "notifies" }
+      ],
+      "flow": {
+        "nodes": [
+          { "id": "start", "kind": "start", "label": "User opens the login page" },
+          { "id": "submit", "kind": "step", "label": "Submit email and password", "scenarioCode": "HP-1" },
+          { "id": "credentials", "kind": "decision", "label": "Valid credentials?" },
+          { "id": "invalid", "kind": "error", "label": "Show 'Invalid email or password'", "scenarioCode": "ER-2" },
+          { "id": "locked", "kind": "error", "label": "Account locked" },
+          { "id": "protected", "kind": "step", "label": "Open a protected page", "scenarioCode": "ED-1" },
+          { "id": "cookie", "kind": "decision", "label": "Session cookie accepted?" },
+          { "id": "foreign-cookie", "kind": "error", "label": "Redirect to the login page", "scenarioCode": "ER-3" },
+          { "id": "logout", "kind": "step", "label": "Log out", "scenarioCode": "HP-2" },
+          { "id": "end", "kind": "end", "label": "Back on the login page" }
+        ],
+        "edges": [
+          { "from": "start", "to": "submit" },
+          { "from": "submit", "to": "credentials" },
+          { "from": "credentials", "to": "protected", "label": "yes" },
+          { "from": "credentials", "to": "invalid", "label": "no" },
+          { "from": "invalid", "to": "locked", "label": "too many attempts" },
+          { "from": "locked", "to": "end" },
+          { "from": "invalid", "to": "submit", "label": "retry" },
+          { "from": "protected", "to": "cookie" },
+          { "from": "cookie", "to": "logout", "label": "yes" },
+          { "from": "cookie", "to": "foreign-cookie", "label": "no" },
+          { "from": "foreign-cookie", "to": "end" },
+          { "from": "logout", "to": "end" }
+        ]
+      }
     }
   ]
 }

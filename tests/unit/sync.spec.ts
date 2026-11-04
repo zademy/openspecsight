@@ -3,7 +3,7 @@ import path from 'node:path'
 import { and, desc, eq } from 'drizzle-orm'
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { analyses, annotations, features, jobs, projects, releases, repositories, scenarioRevisions, scenarios } from '../../server/db/schema'
+import { analyses, annotations, connections, features, flows, jobs, projects, releases, repositories, scenarioRevisions, scenarios } from '../../server/db/schema'
 import { runInitialAnalysis } from '../../server/services/analysis.service'
 import { enqueueJob } from '../../server/services/jobs.service'
 import { runSync, startSync, SyncInProgressError } from '../../server/services/sync.service'
@@ -110,6 +110,25 @@ function latestAnalysis(projectId: number) {
     .get()
 }
 
+/** Every stored connection of the project as sorted (from, to, type) name triples. */
+function connectionTriples(projectId: number) {
+  const names = new Map(
+    getDB().select().from(features).where(eq(features.projectId, projectId)).all().map((row) => [row.id, row.name]),
+  )
+  return getDB().select().from(connections)
+    .where(eq(connections.projectId, projectId))
+    .all()
+    .map((row) => ({ from: names.get(row.fromFeatureId), to: names.get(row.toFeatureId), type: row.type }))
+    .sort((a, b) => `${a.from}|${a.to}|${a.type}`.localeCompare(`${b.from}|${b.to}|${b.type}`))
+}
+
+function untouchedConnectionRows(projectId: number, authId: number) {
+  return getDB().select().from(connections)
+    .where(eq(connections.projectId, projectId))
+    .all()
+    .filter((row) => row.fromFeatureId !== authId && row.toFeatureId !== authId)
+}
+
 describe('runSync', () => {
   test('(a) no new commits → releaseId null, zero llm calls, analyses row reports up-to-date', async () => {
     const projectId = await seedAnalyzedProject()
@@ -124,7 +143,7 @@ describe('runSync', () => {
     expect(getDB().select().from(releases).all()).toHaveLength(0)
     const row = latestAnalysis(projectId)!
     expect(row).toMatchObject({ type: 'sync', status: 'done', step: 'up-to-date', progress: 100, error: null })
-    expect(JSON.parse(row.statsJson)).toEqual({ features: 0, scenarios: 0, files: 0 })
+    expect(JSON.parse(row.statsJson)).toEqual({ features: 0, scenarios: 0, files: 0, connections: 0, connectionsSkipped: 0, flows: 0 })
   })
 
   test('(b) new auth commits update only Authentication: new/changed/fixed applied, gone deleted, codes correct', async () => {
@@ -165,7 +184,83 @@ describe('runSync', () => {
 
     const row = latestAnalysis(projectId)!
     expect(row).toMatchObject({ type: 'sync', status: 'done', step: 'done' })
-    expect(JSON.parse(row.statsJson)).toEqual({ features: 1, scenarios: 4, files: 2 })
+    expect(JSON.parse(row.statsJson)).toEqual({ features: 1, scenarios: 4, files: 2, connections: 2, connectionsSkipped: 3, flows: 1 })
+  })
+
+  describe('map and flow refresh (Task 6)', () => {
+    test('the sync payload refreshes the affected feature\'s flow graph and its connection set', async () => {
+      const projectId = await seedAnalyzedProject()
+      const auth = featureByName(projectId, 'Authentication')!
+
+      await runSync({ projectId }, syncDeps())
+
+      // Flow: the payload's redrawn graph replaced the analysis graph — the new error node is in.
+      const flowRow = getDB().select().from(flows).where(eq(flows.featureId, auth.id)).get()
+      const graph = JSON.parse(flowRow?.graphJson ?? '{}') as { nodes: Array<{ label: string }> }
+      expect(graph.nodes.map((node) => node.label)).toContain('Account locked')
+
+      // Connections: every stored row touching Authentication equals the payload's refreshed set
+      // (shares_data and the no-longer-flagged depends_on are gone, notifies is new).
+      expect(connectionTriples(projectId).filter((triple) => triple.from === 'Authentication' || triple.to === 'Authentication'))
+        .toEqual([
+          { from: 'Authentication', to: 'Tasks', type: 'authenticates' },
+          { from: 'Authentication', to: 'Tasks', type: 'notifies' },
+        ])
+    })
+
+    test('flows and connections of unaffected features stay byte-for-byte identical', async () => {
+      const projectId = await seedAnalyzedProject()
+      const auth = featureByName(projectId, 'Authentication')!
+      const tasks = featureByName(projectId, 'Tasks')!
+      const beforeAuthFlow = getDB().select().from(flows).where(eq(flows.featureId, auth.id)).get()
+      const beforeTasksFlow = getDB().select().from(flows).where(eq(flows.featureId, tasks.id)).get()
+      const beforeUntouched = untouchedConnectionRows(projectId, auth.id)
+      // The Login → Task list edge must exist, or this test proves nothing.
+      expect(beforeUntouched.length).toBeGreaterThan(0)
+
+      await runSync({ projectId }, syncDeps())
+
+      // Review Focus #3: only the affected feature's maps may move.
+      expect(getDB().select().from(flows).where(eq(flows.featureId, tasks.id)).get()).toEqual(beforeTasksFlow)
+      expect(untouchedConnectionRows(projectId, auth.id)).toEqual(beforeUntouched)
+      // Authentication's flow actually moved, so the untouched row can't have been swapped either.
+      expect(getDB().select().from(flows).where(eq(flows.featureId, auth.id)).get()?.graphJson)
+        .not.toBe(beforeAuthFlow?.graphJson)
+      expect(getDB().select().from(flows).all()).toHaveLength(2)
+    })
+
+    test('a payload without connections/flow (the old fixture shape) writes nothing to the maps', async () => {
+      const projectId = await seedAnalyzedProject()
+      const legacy = JSON.parse(JSON.stringify(SYNC_UPDATE))
+      delete legacy.featureUpdates[0].connections
+      delete legacy.featureUpdates[0].flow
+      const beforeFlows = getDB().select().from(flows).all()
+      const beforeConnections = getDB().select().from(connections).all()
+
+      await runSync({ projectId }, syncDeps({ responses: { 'sync-update:authentication': legacy } }))
+
+      expect(getDB().select().from(flows).all()).toEqual(beforeFlows)
+      expect(getDB().select().from(connections).all()).toEqual(beforeConnections)
+      expect(JSON.parse(latestAnalysis(projectId)!.statsJson)).toEqual({
+        features: 1,
+        scenarios: 4,
+        files: 2,
+        connections: 0,
+        connectionsSkipped: 0,
+        flows: 0,
+      })
+    })
+
+    test('the payload\'s self-links, unknown names and duplicates are skipped and counted', async () => {
+      const projectId = await seedAnalyzedProject()
+
+      await runSync({ projectId }, syncDeps())
+
+      expect(JSON.parse(latestAnalysis(projectId)!.statsJson)).toMatchObject({ connections: 2, connectionsSkipped: 3, flows: 1 })
+      const triples = connectionTriples(projectId)
+      expect(triples.some((triple) => triple.from === 'Authentication' && triple.to === 'Authentication')).toBe(false)
+      expect(triples.some((triple) => triple.from === 'Notifications' || triple.to === 'Notifications')).toBe(false)
+    })
   })
 
   test('(c) a manual scenario matched by a changed entry stays byte-for-byte and gets a proposed revision', async () => {

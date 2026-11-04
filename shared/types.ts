@@ -33,6 +33,7 @@ export interface FeatureFlow {
 }
 
 export type Connections = z.infer<typeof ConnectionsSchema>
+export type ConnectionEdge = Connections['connections'][number]
 export type ConnectionType = Connections['connections'][number]['type']
 
 // --- Project management ---
