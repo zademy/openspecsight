@@ -103,6 +103,11 @@ describe('getMap', () => {
     expect(map?.nodes).toHaveLength(4)
     expect(map?.edges).toEqual([])
     expect(map?.empty).toBe(true)
+    // Pre-Plan-2 world: features and scenario counts survive an edge-less
+    // map so the page's empty state can still list every feature.
+    const byName = new Map(map?.nodes.map((node) => [node.name, node]))
+    expect(byName.get('Authentication')).toMatchObject({ scenarioCount: 2, isChild: false })
+    expect(byName.get('Task list')).toMatchObject({ scenarioCount: 0, isChild: true })
   })
 
   test('scopes nodes and edges to the requested project', () => {
