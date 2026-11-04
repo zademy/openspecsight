@@ -45,3 +45,21 @@ Branch `feat/visualization` from 60d2c40; HEAD 06efd0a. 9/9 tasks approved; fina
 
 ## Parked minors at merge (input for Plan 3 / final polish)
 P2-T1: CRUD roundtrip partial; rowid=scenario.id comment; connections composite index; pinned 0|1 TS guard. P2-T2: stats pre-Plan2 indistinguishable; MapEdge per-type direction (reopen if arrows ever needed). P2-T3: canvas keyboard-focus/a11y pass; vue-flow CSS chunk flash; hover doesn't dim non-adjacent nodes; `h-[60vh]` landscape. P2-T4: `Number.isInteger` vs zod (consistent w/ siblings); corrupt graphJson → 500 swallowed; wheel-zoom over canvas; projects.spec exact-text race (alias-mitigated). P2-T6: real-LLM partial payload silent drops (prompt now demands full set — REOPEN FIRST when real-mode smoke begins, Plan 3 prerequisite); `idsByName` pre-tx staleness; two-affected-features last-writer-wins (self-heals). P2-T7: corpus-pinned operator-soup test; OR-pass precision tail (min-idf someday). P2-T8: failed-question resubmit no-op; touch-invisible conversation delete; `runAsk` nav-failure reset; follow-up loses typed question; ⌘K glyph on Ctrl platforms; GET conversations `200 []` on unknown project; citation tooltips doc drift. Final wave: `deleteProjectsByName` JSDoc lost in sweep (cosmetic).
+
+# Plan 3 (Communication) — Controller Ledger (durable record)
+
+Branch `feat/communication` from 71f2a0e; HEAD f8f354f. 10/10 tasks approved; final whole-branch review "With fixes" → fix wave resolved (voices manager UI, export annotations, R-02 ×2, +4 cheap). Gates at HEAD: lint ✓ typecheck ✓ unit 359/359 e2e 30/30.
+
+## Rulings (order taken)
+1. Voices discoverability gap was a PLAN defect (my Task 5 lacked a UI file list) — fixed in final wave with a manager UI rather than API-only docs (README already promised voices).
+2. Export "whole spec" must include annotations (RF5 reasonable-operator reading) — quote lines under scenarios.
+3. Connections appendix `A — type → B` and export generated-stamp formats: delimiter = data formatting (em dash allowed); generated copy = prose (colon required). Ratified twice (T8, T10).
+4. Digest default range documented as an honest 8-day inclusive window ("today plus the seven days before it") — kept −7 arithmetic.
+5. deleteVoice: notes fall back to implicit Default voice via transactional null-out (FK is ON by driver default — re-proven).
+6. Webhook replay tolerance: no nonce store; startSync 409-dedupe + no-op-when-current make redelivery harmless (ratified).
+7. Voice/list-block enhance: paragraphs only (documented limitation); headings never enhancable.
+8. send-then-stamp email semantics (at-least-once) — a stamped-but-unsent digest would be a fake sent state (RF2 violation); duplicate email is the lesser harm.
+9. Webhook path exempted one-shot in T6 (before T9's route existed) — disclosed and test-pinned later.
+
+## Parked for Plan 4 / polish (P3 additions)
+`/api/notes/public/` empty-slug 302+router warnings; loud 404 logs; annotation bodies with quotes/markdown in export format; voices manager SSR wasted fetch + double-Enter job race in modals; "N of M published" summary copy; emailedAt client-fabricated (refetch after send); stub aliases 4→10 (reuse policy); full-flow Saved-label relative-time flake candidate; README:47/64 pre-existing em dashes (authored pre-Plan-3, ruled out of scope).
