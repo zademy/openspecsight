@@ -1,20 +1,26 @@
 import { asc, desc, eq } from 'drizzle-orm'
 import { getDB } from '../db/client'
-import { connections, features, projects, releases, scenarios } from '../db/schema'
+import { annotations, connections, features, projects, releases, scenarios } from '../db/schema'
 import { featureSlug } from './analysis/paths'
 import { humanizeConnectionType } from '../../shared/connection-labels'
 
 /**
  * The whole product spec as one portable Markdown document: the feature
  * tree with its scenario groups — the same content the spec UI renders,
- * scenarios on the row they live on — plus appendices for the feature
+ * scenarios on the row they live on, each followed by its operator
+ * annotations as quoted lines — plus appendices for the feature
  * connections and the release history. Served by
  * /api/projects/:id/export/markdown as an attachment download.
  */
 
 interface ExportGroup {
   context: string
-  scenarios: Array<{ code: string, action: string, outcome: string }>
+  scenarios: Array<{
+    code: string
+    action: string
+    outcome: string
+    annotations: Array<{ body: string, author: string }>
+  }>
 }
 
 interface ExportFeature {
@@ -34,6 +40,9 @@ function renderFeature(feature: ExportFeature, level: number, lines: string[]): 
     lines.push(`**${group.context}**`, '')
     for (const scenario of group.scenarios) {
       lines.push(`- \`${scenario.code}\` ${scenario.action} → ${scenario.outcome}`)
+      for (const note of scenario.annotations) {
+        lines.push(`    > "${note.body}" (${note.author})`)
+      }
     }
     lines.push('')
   }
@@ -58,6 +67,7 @@ export async function exportProjectMarkdown(projectId: number): Promise<{ markdo
   }).from(features).where(eq(features.projectId, projectId)).orderBy(asc(features.sortOrder), asc(features.id)).all()
 
   const scenarioRows = db.select({
+    id: scenarios.id,
     featureId: scenarios.featureId,
     context: scenarios.context,
     code: scenarios.code,
@@ -68,6 +78,24 @@ export async function exportProjectMarkdown(projectId: number): Promise<{ markdo
     .where(eq(features.projectId, projectId))
     .orderBy(asc(scenarios.sortOrder), asc(scenarios.id))
     .all()
+
+  // Annotations scope to their scenario and travel via the feature rows;
+  // oldest first, the order the spec UI shows them in.
+  const annotationRows = db.select({
+    scenarioId: annotations.scenarioId,
+    body: annotations.body,
+    author: annotations.author,
+  }).from(annotations)
+    .innerJoin(scenarios, eq(annotations.scenarioId, scenarios.id))
+    .innerJoin(features, eq(scenarios.featureId, features.id))
+    .where(eq(features.projectId, projectId))
+    .orderBy(asc(annotations.id)).all()
+  const annotationsByScenario = new Map<number, Array<{ body: string, author: string }>>()
+  for (const row of annotationRows) {
+    const notes = annotationsByScenario.get(row.scenarioId) ?? []
+    notes.push({ body: row.body, author: row.author })
+    annotationsByScenario.set(row.scenarioId, notes)
+  }
 
   const connectionRows = db.select().from(connections).where(eq(connections.projectId, projectId)).all()
 
@@ -88,7 +116,12 @@ export async function exportProjectMarkdown(projectId: number): Promise<{ markdo
       group = { context: row.context, scenarios: [] }
       groups.push(group)
     }
-    group.scenarios.push({ code: row.code, action: row.action, outcome: row.outcome })
+    group.scenarios.push({
+      code: row.code,
+      action: row.action,
+      outcome: row.outcome,
+      annotations: annotationsByScenario.get(row.id) ?? [],
+    })
     groupsByFeature.set(row.featureId, groups)
   }
 

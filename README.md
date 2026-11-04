@@ -152,8 +152,8 @@ there; a missing page says nothing about whether a draft exists.
 
 The **Product spec** page has a download button (top right). It hands the
 browser one Markdown file with the whole spec: features with their
-scenarios, the feature connections, and the release history, named after
-the project.
+scenarios and the annotations on them, the feature connections, and the
+release history, named after the project.
 
 ## Scripts
 

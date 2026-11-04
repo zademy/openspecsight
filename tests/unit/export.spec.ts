@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { analyses, connections, features, projects, releases, repositories, scenarios } from '../../server/db/schema'
+import { analyses, annotations, connections, features, projects, releases, repositories, scenarios } from '../../server/db/schema'
 import { runInitialAnalysis } from '../../server/services/analysis.service'
 import { exportProjectMarkdown } from '../../server/services/export.service'
 import { createManualScenario } from '../../server/services/spec.service'
@@ -184,6 +184,30 @@ describe('exportProjectMarkdown', () => {
     expect(loginHeading).toBeGreaterThan(0)
     expect(manualLine).toBeGreaterThan(loginHeading)
     expect(manualLine).toBeLessThan(nextHeading)
+  })
+
+  test('an annotation exports as a quoted line under its scenario', async () => {
+    const db = getDB()
+    const login = db.select().from(features).where(and(eq(features.projectId, projectId), eq(features.name, 'Login'))).get()
+    const scenario = createManualScenario(login!.id, {
+      context: 'user locked out',
+      action: 'request a magic link',
+      outcome: 'the link lands in the mailbox',
+      category: 'happy',
+    })
+    db.insert(annotations).values({
+      scenarioId: scenario!.id,
+      body: 'The link expires after ten minutes.',
+      author: 'dana',
+      createdAt: '2026-11-04T10:00:00.000Z',
+    }).run()
+
+    const { markdown } = await exportProjectMarkdown(projectId)
+
+    expect(markdown).toContain('- `HP-1` request a magic link → the link lands in the mailbox\n    > "The link expires after ten minutes." (dana)')
+    // The completeness footer counts features, scenarios and connections;
+    // the annotation rides along without entering any count.
+    expect(markdown).toContain('6 features · 13 scenarios · 4 connections')
   })
 
   test('the filename is a kebab-case ASCII slug of the project name', async () => {
