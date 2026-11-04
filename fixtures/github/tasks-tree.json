@@ -1,0 +1,143 @@
+{
+  "sha": "c3f9a1d2e4b506879acbdfe0123456789abcdef01",
+  "url": "https://api.github.com/repos/acme/tasks/git/trees/main",
+  "tree": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1a4d5e6f70829a3b4c5d6e7f8091a2b3c4d5e6f7",
+      "size": 48,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/1a4d5e6f70829a3b4c5d6e7f8091a2b3c4d5e6f7"
+    },
+    {
+      "path": "package.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2b5e6f70819a3b4c5d6e7f8091a2b3c4d5e6f7a1",
+      "size": 44,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/2b5e6f70819a3b4c5d6e7f8091a2b3c4d5e6f7a1"
+    },
+    {
+      "path": "package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3c6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1b2",
+      "size": 214356,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/3c6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1b2"
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4d708192a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/tasks/git/trees/4d708192a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3"
+    },
+    {
+      "path": "src/auth",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5e8192a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/tasks/git/trees/5e8192a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4"
+    },
+    {
+      "path": "src/auth/login.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6f92a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5",
+      "size": 106,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/6f92a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5"
+    },
+    {
+      "path": "src/auth/session.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f60",
+      "size": 96,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/7a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f60"
+    },
+    {
+      "path": "src/tasks",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f6071",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/tasks/git/trees/8b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f6071"
+    },
+    {
+      "path": "src/tasks/list.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f607182",
+      "size": 103,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/9c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f607182"
+    },
+    {
+      "path": "src/tasks/create.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ad6e7f8091a2b3c4d5e6f7a1b2c3d4e5f60718293",
+      "size": 107,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/ad6e7f8091a2b3c4d5e6f7a1b2c3d4e5f60718293"
+    },
+    {
+      "path": "src/styles.css",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "be7f8091a2b3c4d5e6f7a1b2c3d4e5f60718293a4",
+      "size": 38,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/be7f8091a2b3c4d5e6f7a1b2c3d4e5f60718293a4"
+    },
+    {
+      "path": "assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "cf8091a2b3c4d5e6f7a1b2c3d4e5f60718293a4b5",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/tasks/git/trees/cf8091a2b3c4d5e6f7a1b2c3d4e5f60718293a4b5"
+    },
+    {
+      "path": "assets/logo.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d091a2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6",
+      "size": 5432,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/d091a2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6"
+    },
+    {
+      "path": "dist",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e1a2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6d7",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/tasks/git/trees/e1a2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6d7"
+    },
+    {
+      "path": "dist/bundle.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8",
+      "size": 81234,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/f2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8"
+    },
+    {
+      "path": "node_modules",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "03c4d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8f9",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/tasks/git/trees/03c4d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8f9"
+    },
+    {
+      "path": "node_modules/.package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "14d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8f90a",
+      "size": 412,
+      "url": "https://api.github.com/repos/acme/tasks/git/blobs/14d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8f90a"
+    }
+  ],
+  "truncated": false
+}

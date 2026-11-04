@@ -1,5 +1,7 @@
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import path from 'node:path'
+import path, { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { generateObject } from 'ai'
 import type { LanguageModel } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
@@ -47,7 +49,6 @@ export interface LlmClientDeps {
 
 const DEFAULT_API_STYLE = 'anthropic'
 const DEFAULT_BASE_URL = 'https://api.minimax.io/anthropic'
-const FIXTURES_DIR = path.resolve(process.cwd(), 'fixtures', 'llm')
 
 /**
  * Reads the LLM_* variables with defaults from .env.example: `LLM_API_STYLE`
@@ -99,15 +100,36 @@ function fixtureFileName(name: string): string {
 async function readFixtureFromDisk(filename: string): Promise<unknown> {
   let text: string
   try {
-    text = await readFile(path.join(FIXTURES_DIR, filename), 'utf8')
+    text = await readFile(path.join(resolveFixturesDir(), filename), 'utf8')
   } catch (error) {
     if (isEnoent(error)) {
-      throw new Error(`Unknown LLM fixture: ${filename} (expected a JSON file in ${FIXTURES_DIR})`, { cause: error })
+      throw new Error(`Unknown LLM fixture: ${filename} (expected a JSON file in ${resolveFixturesDir()})`, { cause: error })
     }
     throw error
   }
   const raw: unknown = JSON.parse(text)
   return raw
+}
+
+/**
+ * Resolves the `fixtures/llm` folder by walking up from this module, mirroring
+ * the migrations-folder lookup in server/db/client.ts: source layout finds the
+ * project's `fixtures/llm` (dev, unit tests), and production builds find the
+ * copy bundled next to the output (nuxt.config's compiled hook copies
+ * `fixtures/` into `.output`, because `nuxt preview` runs with cwd = `.output`).
+ */
+function resolveFixturesDir(): string {
+  const here = dirname(fileURLToPath(import.meta.url))
+  for (let dir = here; ; dir = dirname(dir)) {
+    const candidate = join(dir, 'fixtures', 'llm')
+    if (existsSync(candidate)) {
+      return candidate
+    }
+    if (dir === dirname(dir)) {
+      break
+    }
+  }
+  throw new Error('LLM fixtures folder not found; expected fixtures/llm in the project or bundled into the build output')
 }
 
 function isEnoent(error: unknown): boolean {

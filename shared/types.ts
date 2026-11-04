@@ -107,4 +107,13 @@ export interface AnalysisProgress {
   progress: number
   step: string
   error: string | null
+  /** Final counts once the pipeline reached `done`; null before that. */
+  stats: AnalysisStats | null
+}
+
+/** Counts stored in analyses.statsJson when an analysis finishes. */
+export interface AnalysisStats {
+  features: number
+  scenarios: number
+  files: number
 }

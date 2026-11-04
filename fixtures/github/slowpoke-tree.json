@@ -1,0 +1,31 @@
+{
+  "sha": "a7c1d3e5f79082b4a6c8d0e2f4a6c8d0e2f4a6c8",
+  "url": "https://api.github.com/repos/acme/slowpoke/git/trees/main",
+  "tree": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b8d2e4f60839a5b7c9d1e3f5a7b9d1e3f5a7b9d1",
+      "size": 44,
+      "url": "https://api.github.com/repos/acme/slowpoke/git/blobs/b8d2e4f60839a5b7c9d1e3f5a7b9d1e3f5a7b9d1"
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c9e3f5a7b9d1e3f5a7b9d1e3f5a7b9d1e3f5a7b9",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/slowpoke/git/trees/c9e3f5a7b9d1e3f5a7b9d1e3f5a7b9d1e3f5a7b9"
+    },
+    {
+      "path": "src/index.ts",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "daf4a6b8c0e2f4a6b8c0e2f4a6b8c0e2f4a6b8c0",
+      "size": 77,
+      "url": "https://api.github.com/repos/acme/slowpoke/git/blobs/daf4a6b8c0e2f4a6b8c0e2f4a6b8c0e2f4a6b8c0"
+    }
+  ],
+  "truncated": false
+}

@@ -242,8 +242,21 @@ describe('getLatestAnalysis', () => {
       progress: 55,
       step: 'generating',
       error: null,
+      stats: null,
     })
     expect(newest.id).toBeTypeOf('number')
+  })
+
+  test('reads the final counts out of statsJson once the pipeline stored them', () => {
+    const projectId = insertProject('With Stats')
+    const db = getDB()
+    db.insert(analyses).values({
+      projectId, type: 'initial', status: 'done', progress: 100, step: 'done',
+      statsJson: JSON.stringify({ features: 6, scenarios: 12, files: 7 }),
+      error: null, createdAt: '2026-11-03T00:00:00.000Z', finishedAt: '2026-11-03T00:01:00.000Z',
+    }).run()
+
+    expect(getLatestAnalysis(projectId)?.stats).toEqual({ features: 6, scenarios: 12, files: 7 })
   })
 
   test('returns null when the project has no analyses', () => {

@@ -1,0 +1,4 @@
+{
+  "b8d2e4f60839a5b7c9d1e3f5a7b9d1e3f5a7b9d1": "# Slowpoke\nA two-file repository whose blobs answer slowly in the stub.\n",
+  "daf4a6b8c0e2f4a6b8c0e2f4a6b8c0e2f4a6b8c0": "export function main() {\n  console.log('slowpoke')\n}\n"
+}

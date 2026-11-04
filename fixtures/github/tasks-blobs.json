@@ -1,0 +1,13 @@
+{
+  "1a4d5e6f70829a3b4c5d6e7f8091a2b3c4d5e6f7": "# Tasks\nA small task manager demo scanned by OpenSpecSight.\n",
+  "2b5e6f70819a3b4c5d6e7f8091a2b3c4d5e6f7a1": "{\n  \"name\": \"tasks\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\"\n}\n",
+  "3c6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1b2": "{\n  \"lockfileVersion\": 3,\n  \"packages\": {}\n}\n",
+  "6f92a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5": "export function login(email: string, password: string) {\n  const user = validateCredentials(email, password)\n  return startSession(user.id)\n}\n",
+  "7a3b4c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f60": "export function startSession(userId: number) {\n  return signSessionCookie({ userId })\n}\n\nexport function endSession() {\n  return clearSessionCookie()\n}\n",
+  "9c5d6e7f8091a2b3c4d5e6f7a1b2c3d4e5f607182": "export function listTasks(userId: number) {\n  return db.tasks.find({ where: { userId }, order: { dueDate: 'asc' } })\n}\n",
+  "ad6e7f8091a2b3c4d5e6f7a1b2c3d4e5f60718293": "export function createTask(userId: number, title: string, dueDate?: string) {\n  return db.tasks.create({ userId, title, dueDate, completed: false })\n}\n",
+  "be7f8091a2b3c4d5e6f7a1b2c3d4e5f60718293a4": ".task-item.completed .title { text-decoration: line-through; }\n",
+  "d091a2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6": "pretend-binary-png-data",
+  "f2b3c4d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8": "(function(){console.log(\"bundled\")})();",
+  "14d5e6f7a1b2c3d4e5f60718293a4b5c6d7e8f90a": "{\n  \"name\": \"tasks\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {}\n}\n"
+}

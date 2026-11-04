@@ -3,7 +3,7 @@ import { getDB } from '../db/client'
 import { analyses } from '../db/schema'
 import { enqueueJob } from './jobs.service'
 import { projectExists } from './projects.service'
-import type { AnalysisProgress } from '../../shared/types'
+import type { AnalysisProgress, AnalysisStats } from '../../shared/types'
 
 /**
  * Analysis row lifecycle for the API layer: starting an initial analysis
@@ -71,7 +71,26 @@ export function getLatestAnalysis(projectId: number): AnalysisProgress | null {
   if (!row) {
     return null
   }
-  return { status: row.status, progress: row.progress, step: row.step, error: row.error }
+  return {
+    status: row.status,
+    progress: row.progress,
+    step: row.step,
+    error: row.error,
+    stats: parseStats(row.statsJson),
+  }
+}
+
+/** Reads the final counts out of statsJson; null while unset or malformed. */
+function parseStats(statsJson: string): AnalysisStats | null {
+  try {
+    const raw = JSON.parse(statsJson) as Partial<AnalysisStats>
+    if (typeof raw.features === 'number' && typeof raw.scenarios === 'number' && typeof raw.files === 'number') {
+      return { features: raw.features, scenarios: raw.scenarios, files: raw.files }
+    }
+  } catch {
+    // Fall through: the row was never finished (statsJson still '{}').
+  }
+  return null
 }
 
 function nowISO(): string {

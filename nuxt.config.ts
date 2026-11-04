@@ -36,12 +36,15 @@ export default defineNuxtConfig({
       // Drizzle migrations are read from disk at runtime (server/db/client.ts
       // resolves them by walking up from its own module), which the bundled
       // server alone cannot satisfy: copy them next to the server entry so
-      // production builds can apply them. Dev builds are skipped.
+      // production builds can apply them. Dev builds are skipped. The same
+      // applies to fixtures/llm, which the mock LLM reads from disk and
+      // `nuxt preview` would otherwise not find (its cwd is .output).
       compiled(nitro) {
         if (nitro.options.dev) {
           return
         }
         cpSync('server/db/migrations', join(nitro.options.output.serverDir, 'db', 'migrations'), { recursive: true })
+        cpSync('fixtures', join(nitro.options.output.dir, 'fixtures'), { recursive: true })
       },
     },
   },
