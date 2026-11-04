@@ -69,6 +69,38 @@ async function onDelete(): Promise<void> {
     deleting.value = false
   }
 }
+
+/** Accordion open-state per context group; groups start expanded. */
+const openGroups = ref<Record<string, string[]>>({})
+for (const group of detail.value?.groups ?? []) {
+  openGroups.value[group.context] = [group.context]
+}
+
+const SCENARIO_HASH = /^#scenario-(\d+)$/
+
+/**
+ * Deep-link ruling (Task 9 caveat): arriving with #scenario-<id> expands the
+ * group containing that scenario, scrolls it into view and focuses it — the
+ * row keeps the accent ring while focused so the landing is visible.
+ */
+async function revealHashScenario(): Promise<void> {
+  const match = SCENARIO_HASH.exec(route.hash)
+  const scenarioId = match ? Number(match[1]) : null
+  const group = (detail.value?.groups ?? [])
+    .find((candidate) => candidate.scenarios.some((scenario) => scenario.id === scenarioId))
+  if (scenarioId === null || !group) {
+    return
+  }
+  openGroups.value = { ...openGroups.value, [group.context]: [group.context] }
+  await nextTick()
+  const row = document.getElementById(`scenario-${scenarioId}`)
+  row?.scrollIntoView({ block: 'center' })
+  ;(row as HTMLElement | null)?.focus({ preventScroll: true })
+}
+
+onMounted(() => {
+  void revealHashScenario()
+})
 </script>
 
 <template>
@@ -106,6 +138,7 @@ async function onDelete(): Promise<void> {
       <ScenarioGroup
         v-for="group in filteredGroups"
         :key="group.context"
+        v-model:open="openGroups[group.context]"
         :group="group"
         @edit="startEdit"
         @remove="confirmingDelete = $event"
@@ -144,3 +177,13 @@ async function onDelete(): Promise<void> {
     </UModal>
   </div>
 </template>
+
+<style scoped>
+/* Deep-link arrival: the revealed scenario row carries the accent ring while
+   focused (:deep — the rows render inside ScenarioGroup). */
+:deep(li[id^='scenario-']:focus) {
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 6px;
+  border-radius: 0.5rem;
+}
+</style>

@@ -90,12 +90,53 @@ export interface ReleaseDTO {
 export interface RevisionDTO {
   kind: RevisionKind
   state: 'applied' | 'proposed'
+  /** Null for applied `gone` rows: the scenario was removed from the spec. */
+  scenarioId: number | null
   code: string
   featureName: string
   featureId: number
   action: string
   outcome: string
   before?: { action: string, outcome: string }
+}
+
+/** Per-kind revision counts of one release (applied and proposed rows). */
+export interface ReleaseCounts {
+  new: number
+  changed: number
+  gone: number
+  fixed: number
+}
+
+/** Release row plus its revision counts, as served by the grouped list API. */
+export interface ReleaseListItem extends ReleaseDTO {
+  counts: ReleaseCounts
+}
+
+/** One calendar day of releases, newest day first, as served by the list API. */
+export interface ReleaseDayGroup {
+  date: string
+  releases: ReleaseListItem[]
+}
+
+/** A release with its revisions grouped by kind, as served by the detail API. */
+export interface ReleaseDetail extends ReleaseDTO {
+  sections: {
+    new: RevisionDTO[]
+    changed: RevisionDTO[]
+    gone: RevisionDTO[]
+    fixed: RevisionDTO[]
+  }
+}
+
+/** `source` query filter of GET /api/projects/:id/releases. */
+export type ReleaseSourceFilter = 'all' | 'ai' | 'manual'
+
+/** Query parameters of GET /api/projects/:id/releases. */
+export interface ReleaseListQuery {
+  source?: ReleaseSourceFilter
+  featureId?: number
+  q?: string
 }
 
 /**

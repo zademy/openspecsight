@@ -5,13 +5,16 @@ import type { ScenarioDTO, ScenarioGroupDTO } from '#shared/types'
  * One context group rendered as an accordion section: the context is the
  * heading, the rows are the product's "context + action → outcome" motif —
  * action as the strong text, the arrow, then the outcome. Edit and delete
- * bubble up to the feature page, which owns the dialogs.
+ * bubble up to the feature page, which owns the dialogs and the accordion
+ * open-state (deep links expand their group, see [featureId].vue).
  */
 
 /** Functional category colors (DESIGN.md): happy/edge/error, never decorative. */
 const CATEGORY_COLORS = { happy: 'success', edge: 'warning', error: 'error' } as const
 
 const props = defineProps<{ group: ScenarioGroupDTO }>()
+
+const open = defineModel<string[]>('open', { required: true })
 
 defineEmits<{ edit: [scenario: ScenarioDTO], remove: [scenario: ScenarioDTO] }>()
 
@@ -28,9 +31,9 @@ const accordionItems = computed<GroupItem[]>(() => [
 
 <template>
   <UAccordion
+    v-model="open"
     type="multiple"
     :items="accordionItems"
-    :default-value="[props.group.context]"
   >
     <template #body="{ item }">
       <ol class="divide-y divide-default">
@@ -39,6 +42,7 @@ const accordionItems = computed<GroupItem[]>(() => [
           :id="`scenario-${scenario.id}`"
           :key="scenario.id"
           class="py-4 first:pt-0 last:pb-0"
+          :tabindex="-1"
         >
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-mono text-xs text-muted">{{ scenario.code }}</span>

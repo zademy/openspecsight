@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * Project overview: repo info, analysis progress/stats. The section rail
- * lives in the project shell (pages/projects/[id].vue); this page only
- * renders the overview section.
+ * Project overview: repo info, analysis progress/stats, the releases
+ * timeline with the ask-bar preview. The section rail lives in the
+ * project shell (pages/projects/[id].vue); this page only renders the
+ * overview section.
  */
 
 const route = useRoute()
@@ -17,6 +18,8 @@ if (error.value || !project.value) {
 }
 
 const { data: analysis } = await useAsyncData(`analysis-${projectId}`, () => latest(projectId))
+const { list } = useReleases()
+const { data: releaseDays } = await useAsyncData(`releases-${projectId}`, () => list(projectId))
 
 const analysisActive = computed(() => analysis.value?.status === 'queued' || analysis.value?.status === 'running')
 // Poll until a terminal state: a page loaded before the analysis was started
@@ -124,6 +127,25 @@ async function onDelete() {
       }]"
     />
 
+    <section aria-labelledby="ask-heading" class="space-y-3">
+      <h2 id="ask-heading" class="text-sm font-medium uppercase tracking-wide text-muted">Ask</h2>
+      <UTooltip text="Not wired up yet — the ask bar ships in the next milestone.">
+        <!-- The trigger must be a plain element: Nuxt UI forwards the tooltip
+             props onto the disabled input itself, which cannot receive hover
+             events, and the tooltip would never open. -->
+        <span class="block w-full max-w-md cursor-not-allowed">
+          <UInput
+            disabled
+            icon="i-lucide-message-circle-question-mark"
+            placeholder="Ask anything (coming next)"
+            class="w-full"
+            :ui="{ base: 'pointer-events-none' }"
+            aria-label="Ask about this project (coming next)"
+          />
+        </span>
+      </UTooltip>
+    </section>
+
     <section class="space-y-3">
       <h2 class="text-sm font-medium uppercase tracking-wide text-muted">Repositories</h2>
       <ul class="space-y-2">
@@ -157,6 +179,41 @@ async function onDelete() {
 
       <p v-else class="text-sm text-muted">
         No analysis has run yet. Once the first scan finishes, features and scenarios appear here.
+      </p>
+    </section>
+
+    <section aria-labelledby="changes-heading" class="space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <h2 id="changes-heading" class="text-sm font-medium uppercase tracking-wide text-muted">Recent changes</h2>
+        <UButton
+          label="All changes"
+          color="neutral"
+          variant="link"
+          size="sm"
+          trailing-icon="i-lucide-arrow-right"
+          :to="`/projects/${projectId}/changes`"
+        />
+      </div>
+
+      <div v-if="(releaseDays ?? []).length > 0" class="space-y-4">
+        <section
+          v-for="day in releaseDays"
+          :key="day.date"
+          :aria-label="`Releases from ${dayHeading(day.date)}`"
+          class="space-y-2"
+        >
+          <h3 class="text-sm font-medium uppercase tracking-wide text-muted">{{ dayHeading(day.date) }}</h3>
+          <ReleaseCard
+            v-for="release in day.releases"
+            :key="release.id"
+            :release="release"
+            :project-id="projectId"
+          />
+        </section>
+      </div>
+
+      <p v-else class="max-w-prose text-sm text-muted">
+        No releases recorded yet. Once a sync runs after new commits land, the changes appear here grouped by day.
       </p>
     </section>
 
