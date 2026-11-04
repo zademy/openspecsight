@@ -1,0 +1,16 @@
+{
+  "id": 846172405,
+  "node_id": "R_kgDOMQbHXQ",
+  "name": "widget",
+  "full_name": "acme/widget",
+  "private": false,
+  "owner": {
+    "login": "acme",
+    "id": 1024,
+    "type": "Organization"
+  },
+  "html_url": "https://github.com/acme/widget",
+  "clone_url": "https://github.com/acme/widget.git",
+  "default_branch": "main",
+  "pushed_at": "2026-10-30T18:40:00Z"
+}

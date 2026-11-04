@@ -1,0 +1,23 @@
+{
+  "sha": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+  "url": "https://api.github.com/repos/acme/widget/git/trees/4b825dc642cb6eb9a060e54bf8d69288fbee4904?recursive=1",
+  "tree": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9d5b6b27e29d2aa6d1e2e7a10f8f2f5c2f1a0e33",
+      "size": 742,
+      "url": "https://api.github.com/repos/acme/widget/git/blobs/9d5b6b27e29d2aa6d1e2e7a10f8f2f5c2f1a0e33"
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b7f2c3a1d0e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9",
+      "size": 0,
+      "url": "https://api.github.com/repos/acme/widget/git/trees/b7f2c3a1d0e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9"
+    }
+  ],
+  "truncated": true
+}

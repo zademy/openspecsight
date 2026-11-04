@@ -1,0 +1,8 @@
+{
+  "sha": "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
+  "node_id": "BA_kgDOB5X2zw",
+  "size": 126,
+  "url": "https://api.github.com/repos/acme/widget/git/blobs/e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
+  "content": "V2lkZ2V0IGlzIGEgc21hbGwgVHlwZVNjcmlwdCBsaWJyYXJ5IHVzZWQgYnkg\ndGhlIE9wZW5TcGVjU2lnaHQgZGVtb3MuCkl0IHNoaXBzIGEgdGlueSBwYXJz\nZXIgYW5kIGEgQ0xJIHdyYXBwZXIgZm9yIGxvY2FsIHJ1bnMuCg==",
+  "encoding": "base64"
+}

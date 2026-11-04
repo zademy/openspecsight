@@ -1,0 +1,65 @@
+{
+  "url": "https://api.github.com/repos/acme/widget/compare/main...feature/tasks",
+  "status": "ahead",
+  "ahead_by": 2,
+  "behind_by": 0,
+  "total_commits": 2,
+  "commits": [
+    {
+      "sha": "fff09124a5b6c7d8e9f0a1b2c3d4e5f60718293a",
+      "commit": {
+        "message": "feat: add tasks module",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com",
+          "date": "2026-10-28T09:15:00Z"
+        },
+        "committer": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com",
+          "date": "2026-10-28T09:15:00Z"
+        }
+      },
+      "parents": [
+        {
+          "sha": "bbb4567890abcdeffedcba9876543210fedcba99",
+          "url": "https://api.github.com/repos/acme/widget/commits/bbb4567890abcdeffedcba9876543210fedcba99"
+        }
+      ]
+    },
+    {
+      "sha": "bbb4567890abcdeffedcba9876543210fedcba99",
+      "commit": {
+        "message": "fix: trim scenario titles",
+        "author": {
+          "name": "Grace Hopper",
+          "email": "grace@example.com",
+          "date": "2026-10-30T18:40:00Z"
+        },
+        "committer": {
+          "name": "Grace Hopper",
+          "email": "grace@example.com",
+          "date": "2026-10-30T18:40:00Z"
+        }
+      },
+      "parents": []
+    }
+  ],
+  "files": [
+    {
+      "filename": "src/tasks.ts",
+      "status": "added",
+      "additions": 42,
+      "deletions": 0,
+      "changes": 42,
+      "patch": "@@ -0,0 +1,3 @@\n+export function createTasks() {\n+  return []\n+}\n"
+    },
+    {
+      "filename": "assets/logo.svg",
+      "status": "added",
+      "additions": 1,
+      "deletions": 0,
+      "changes": 1
+    }
+  ]
+}
