@@ -101,8 +101,10 @@ test.describe('release notes', () => {
       await page.getByRole('option', { name: /Tighter sign-in checks/ }).click()
       await dialog.getByRole('button', { name: 'Draft note' }).click()
 
-      // 202 → the page polls its own list until the draft appears.
-      await expect(page.getByText('Tighter sign-in checks')).toBeVisible({ timeout: 30_000 })
+      // 202 → the page polls its own list until the draft appears. The
+      // link role keeps this off the modal's (hidden) native select
+      // duplicate of the same title while the dialog is closing.
+      await expect(page.getByRole('link', { name: 'Tighter sign-in checks' })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByText('Draft', { exact: true })).toBeVisible()
 
       const listResponse = await page.request.get(`/api/projects/${projectId}/release-notes`)
