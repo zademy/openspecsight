@@ -1,5 +1,11 @@
+import crypto from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { expect, test, type Page, type Response } from '@playwright/test'
-import type { FeatureNode } from '../../shared/types'
+import Database from 'better-sqlite3'
+import type { AnalysisProgress, FeatureNode } from '../../shared/types'
 import { askFromOverview, deleteScriptedAnswer, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
 import { login } from './helpers/login'
 
@@ -12,7 +18,12 @@ import { login } from './helpers/login'
  * the release back into the spec, read the refreshed maps (the flow
  * diagram renders the sync fixture's new "Account locked" node) and ask
  * from the overview, following the citation chip to the wrong-password
- * row. Two hard rulings ride along (plan Review Focus #2/#3):
+ * row. The release then reaches people: a digest over the default week
+ * renders its blocks, the release note drafted from the release is
+ * edited, enhanced and published, a logged-out visitor reads it at
+ * /notes/<slug>, the spec export hands over a download that carries the
+ * release history, and a signed cookie-less push webhook triggers a sync
+ * that completes. Two hard rulings ride along (plan Review Focus #2/#3):
  * - the manually edited scenario must keep the exact text the user wrote
  *   (byte-for-byte) and show the "suggested" badge for the pending AI
  *   revision the sync parked instead of applying — and the operator can then
@@ -53,6 +64,42 @@ async function setStubState(page: Page, state: 'initial' | 'after-auth-commit'):
   const response = await page.request.post(STUB_ADMIN, { data: { repo: STUB_REPO, state } })
   // The body names the rejected field when the stub answers 400.
   expect(response.status(), await response.text()).toBe(200)
+}
+
+/** Opens the e2e server's SQLite database (same layout as digests.spec). */
+function openServerDb(): Database.Database {
+  for (const candidate of [path.resolve(process.cwd(), '.output', 'data', 'test-e2e.db'), path.resolve(process.cwd(), 'data', 'test-e2e.db')]) {
+    if (existsSync(candidate)) {
+      return new Database(candidate)
+    }
+  }
+  throw new Error('e2e server database not found (expected .output/data/test-e2e.db or data/test-e2e.db)')
+}
+
+/**
+ * Rewrites the project's release timestamps to yesterday and returns the
+ * UTC date it stamped. The stub fixtures carry static committedAt values,
+ * while the "New digest" modal defaults to the last seven days —
+ * backdating keeps that default range non-empty on any run date.
+ */
+function backdateReleasesToYesterday(projectId: number): string {
+  const stamped = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const db = openServerDb()
+  db.prepare('UPDATE releases SET committedAt = ? WHERE projectId = ?').run(stamped, projectId)
+  db.close()
+  return stamped.slice(0, 10)
+}
+
+const WEBHOOK_SECRET = 'webhook-e2e-secret' // matches playwright.config env
+
+/** The exact header GitHub sends: sha256=, hex HMAC over the body bytes. */
+function signDelivery(body: string): string {
+  return `sha256=${crypto.createHmac('sha256', WEBHOOK_SECRET).update(body, 'utf8').digest('hex')}`
+}
+
+/** Mirrors the export's filename rule (featureSlug) for this project name. */
+function exportFilename(name: string): string {
+  return name.trim().toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-+|-+$/g, '')
 }
 
 /** True when any object key anywhere in the value is exactly `pat` (any case). */
@@ -104,10 +151,10 @@ function watchForSecretLeaks(page: Page, leaks: string[]): void {
   })
 }
 
-test('full flow: connect, analyze, edit, sync, and the manual edit survives', async ({ page }) => {
-  // Analysis, sync and the ask round trip all poll the UI; 30 s per step
-  // is not enough for the whole flow including the webServer build fanfare.
-  test.setTimeout(180_000)
+test('full flow: connect, analyze, edit, sync, digest, publish, export, and the webhook', async ({ page }) => {
+  // Every leg polls the UI; 30 s per step is not enough for the whole
+  // flow including the webServer build fanfare.
+  test.setTimeout(240_000)
 
   const leaks: string[] = []
   watchForSecretLeaks(page, leaks)
@@ -256,6 +303,105 @@ async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   await expect(wrongPasswordRow).toBeVisible()
   await expect(wrongPasswordRow).toBeInViewport()
   await expect(wrongPasswordRow).toBeFocused()
+
+  // --- The release reaches people: the communication legs (Plan 3). ---
+
+  // (a) Weekly digest: backdate this project's releases so the modal's
+  // default last-seven-days range is non-empty, generate with the
+  // defaults, and read the detail page's rendered blocks.
+  const stampedDay = backdateReleasesToYesterday(projectId)
+  await page.getByRole('link', { name: 'Digests' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/digests$`))
+  await page.getByRole('button', { name: 'New digest' }).click()
+  await page.getByRole('button', { name: 'Create digest' }).click()
+  // Digests have no progress endpoint: the list says what it is doing
+  // and polls until the new digest appears.
+  await expect(page.getByText('Writing this week')).toBeVisible()
+  await expect(page.getByText('Tighter sign-in and a steadier week')).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('link', { name: 'Tighter sign-in and a steadier week' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/digests/\\d+$`))
+  await expect(page.getByRole('heading', { name: 'Tighter sign-in and a steadier week' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible()
+
+  // (b) The release note drafted from that release, edited, enhanced,
+  // published, and read by a visitor with no session in the context.
+  await page.getByRole('link', { name: 'Release notes' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/release-notes$`))
+  await page.getByRole('button', { name: 'New release note' }).click()
+  const noteDialog = page.getByRole('dialog')
+  await noteDialog.getByRole('combobox', { name: 'Release' }).click()
+  await page.getByRole('option', { name: /Tighter sign-in checks/ }).click()
+  await noteDialog.getByRole('button', { name: 'Draft note' }).click()
+  // 202 → the list polls until the drafted note appears.
+  await page.getByRole('link', { name: 'Tighter sign-in checks' }).click({ timeout: 30_000 })
+  const noteTitle = page.getByRole('textbox', { name: 'Title' })
+  await expect(noteTitle).toHaveValue('Tighter sign-in checks')
+  await noteTitle.fill('Tighter sign-in checks, explained')
+  await page.getByRole('textbox', { name: 'Paragraph 2' }).fill('Admins now confirm a second factor before any session starts.')
+  // Edits autosave; the quiet indicator reports each save.
+  await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Enhance', exact: true }).click()
+  await page.getByRole('button', { name: 'Rewrite paragraph' }).click()
+  await expect(page.getByRole('textbox', { name: 'Paragraph 2' })).toHaveValue(/^Admin sign-in now has a second gate:/, { timeout: 15_000 })
+  await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Publish' }).click()
+  await expect(page.getByText('Published', { exact: true })).toBeVisible()
+  const notes = await (await page.request.get(`/api/projects/${projectId}/release-notes`)).json() as Array<{ slug: string }>
+  expect(notes).toHaveLength(1)
+  const visitorContext = await page.context().browser()!.newContext()
+  const visitor = await visitorContext.newPage()
+  try {
+    await visitor.goto(`/notes/${notes[0]!.slug}`)
+    await expect(visitor.getByRole('heading', { name: 'Tighter sign-in checks, explained' })).toBeVisible()
+    await expect(visitor.getByText(/^Admin sign-in now has a second gate:/)).toBeVisible()
+    await expect(visitor.getByText('Second factor at sign-in')).toBeVisible()
+  } finally {
+    await visitorContext.close()
+  }
+
+  // (c) The spec export hands the browser a real download, and the
+  // document closes with the release history — including the title this
+  // flow synced.
+  await page.getByRole('link', { name: 'Product spec' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/spec$`))
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('link', { name: 'Export Markdown' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe(`${exportFilename(projectName())}.md`)
+  const exportPath = path.join(os.tmpdir(), `openspecsight-full-flow-${download.suggestedFilename()}`)
+  await download.saveAs(exportPath)
+  const exported = await readFile(exportPath, 'utf8')
+  expect(exported).toContain(`# ${projectName()}`)
+  expect(exported).toContain('## Releases')
+  expect(exported).toContain(`- Tighter sign-in checks — ${stampedDay}`)
+
+  // (d) The automatic sync: GitHub delivers a push — cookie-less, the
+  // HMAC signature over the exact body bytes being the only credential
+  // (the webhook.spec scheme). The stub serves no commit beyond the one
+  // the manual sync leg pulled, so the enqueued sync finishes as an
+  // honest up-to-date run; a fresh progress row landing on that step
+  // proves the delivery reached this project and its sync completed.
+  const webhook = await page.context().browser()!.newContext()
+  try {
+    const deliveryBody = JSON.stringify({ repository: { full_name: STUB_REPO }, ref: 'refs/heads/main' })
+    const delivery = await webhook.request.post('/api/webhooks/github', {
+      data: deliveryBody,
+      headers: {
+        'content-type': 'application/json',
+        'x-github-event': 'push',
+        'x-hub-signature-256': signDelivery(deliveryBody),
+      },
+    })
+    expect(delivery.status()).toBe(200)
+    expect(await delivery.json()).toEqual({ ok: true, synced: [projectId] })
+  } finally {
+    await webhook.close()
+  }
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/projects/${projectId}/analyses`)
+    const progress = (await response.json()) as AnalysisProgress
+    return `${progress.status}:${progress.step}`
+  }, { timeout: 30_000 }).toBe('done:up-to-date')
 
   // Review Focus #3: nothing above may have leaked a secret.
   expect(leaks, leaks.join('\n')).toEqual([])
