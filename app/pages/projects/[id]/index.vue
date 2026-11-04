@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { FetchError } from 'ofetch'
+
 /**
  * Project overview: repo info, analysis progress/stats, the releases
  * timeline with the ask-bar preview. The section rail lives in the
@@ -10,7 +12,7 @@ const route = useRoute()
 const projectId = route.params.id as string
 
 const { get, remove } = useProjects()
-const { latest } = useAnalyses()
+const { latest, start, sync } = useAnalyses()
 const { data: project, error } = await useAsyncData(`project-${projectId}`, () => get(projectId))
 
 if (error.value || !project.value) {
@@ -26,6 +28,11 @@ const analysisActive = computed(() => analysis.value?.status === 'queued' || ana
 // sees `null` first and must still pick up the run once it appears.
 const shouldPoll = computed(() => analysis.value?.status !== 'done' && analysis.value?.status !== 'error')
 
+// Operators can only start what has not happened yet: the first scan on a
+// fresh project (or a retry after an error), and a sync once a spec exists.
+const canRunAnalysis = computed(() => analysis.value === null || analysis.value.status === 'error')
+const canSync = computed(() => analysis.value?.status === 'done' && (project.value?.repositories.length ?? 0) > 0)
+
 /** Pipeline step → sentence the operator can act on; specific, not generic. */
 const RUNNING_STEP_LABELS: Record<string, string> = {
   queued: 'Waiting for the analysis queue…',
@@ -33,6 +40,10 @@ const RUNNING_STEP_LABELS: Record<string, string> = {
   tree: 'Mapping the repository tree…',
   blobs: 'Reading the repository…',
   inventory: 'Identifying features…',
+  head: 'Checking the repository head…',
+  diff: 'Diffing the new commits…',
+  features: 'Revising the affected features…',
+  apply: 'Recording the release…',
 }
 
 const stepLabel = computed(() => {
@@ -56,14 +67,29 @@ const statsLabel = computed(() => {
   ].join(' · ')
 })
 
+/** Terminal sentence names what actually ran: a scan or a sync. */
+const doneLabel = computed(() => {
+  if (analysis.value?.type === 'sync') {
+    return analysis.value.step === 'up-to-date' ? 'Already up to date with the repository.' : 'Sync finished.'
+  }
+  return 'Initial analysis finished.'
+})
+
 const POLL_INTERVAL_MS = 2000
 let pollTimer: ReturnType<typeof setInterval> | null = null
+// Set while a sync runs; when the run lands, the release timeline refetches
+// so the fresh release appears without a manual reload.
+let pendingReleaseRefresh = false
 
 async function pollLatest(): Promise<void> {
   try {
     analysis.value = await latest(projectId)
   } catch {
     // Keep the last known state; a transient failure resolves on the next tick.
+  }
+  if (!shouldPoll.value && pendingReleaseRefresh) {
+    pendingReleaseRefresh = false
+    await refreshNuxtData(`releases-${projectId}`)
   }
   if (!shouldPoll.value) {
     stopPolling()
@@ -95,6 +121,41 @@ if (import.meta.client) {
     }
   }, { immediate: true })
   onBeforeUnmount(stopPolling)
+}
+
+const actionError = ref('')
+const startingAnalysis = ref(false)
+const syncing = ref(false)
+const busy = computed(() => analysisActive.value || startingAnalysis.value || syncing.value)
+
+async function onRunAnalysis(): Promise<void> {
+  startingAnalysis.value = true
+  actionError.value = ''
+  try {
+    await start(projectId)
+    await pollLatest()
+  } catch (cause) {
+    actionError.value = (cause as FetchError<{ message?: string }>).data?.message
+      ?? 'The analysis could not be started. Try again.'
+  } finally {
+    startingAnalysis.value = false
+  }
+}
+
+async function onSyncNow(): Promise<void> {
+  syncing.value = true
+  actionError.value = ''
+  try {
+    await sync(projectId)
+    pendingReleaseRefresh = true
+    await pollLatest()
+  } catch (cause) {
+    actionError.value = (cause as FetchError<{ message?: string }>).data?.message
+      ?? 'The sync could not be started. Try again.'
+    pendingReleaseRefresh = false
+  } finally {
+    syncing.value = false
+  }
 }
 
 const confirmingDelete = ref(false)
@@ -161,7 +222,32 @@ async function onDelete() {
     </section>
 
     <section class="space-y-3">
-      <h2 class="text-sm font-medium uppercase tracking-wide text-muted">Analysis</h2>
+      <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h2 class="text-sm font-medium uppercase tracking-wide text-muted">Analysis</h2>
+        <div class="flex flex-wrap items-center gap-2">
+          <p v-if="actionError" class="text-sm text-error" role="alert">{{ actionError }}</p>
+          <UButton
+            v-if="canSync"
+            label="Sync now"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            icon="i-lucide-refresh-cw"
+            :loading="syncing"
+            :disabled="busy"
+            @click="onSyncNow"
+          />
+          <UButton
+            v-if="canRunAnalysis"
+            label="Run analysis"
+            size="sm"
+            icon="i-lucide-play"
+            :loading="startingAnalysis"
+            :disabled="busy"
+            @click="onRunAnalysis"
+          />
+        </div>
+      </div>
 
       <div v-if="analysisActive" class="max-w-md space-y-2" aria-live="polite">
         <p class="text-sm text-muted">{{ stepLabel }}</p>
@@ -169,7 +255,7 @@ async function onDelete() {
       </div>
 
       <div v-else-if="analysis?.status === 'done'" class="flex flex-wrap items-center gap-2 text-sm text-muted">
-        <span>Initial analysis finished.</span>
+        <span>{{ doneLabel }}</span>
         <UBadge v-if="analysis.stats" color="success" variant="subtle" :label="statsLabel" />
       </div>
 

@@ -285,6 +285,7 @@ describe('getLatestAnalysis', () => {
     }).returning().get()
 
     expect(getLatestAnalysis(projectId)).toEqual({
+      type: 'initial',
       status: 'running',
       progress: 55,
       step: 'generating',

@@ -8,7 +8,9 @@ import type { AnalysisProgress, FeatureNode } from '../../shared/types'
  * counts motif, the changes list must filter by feature, and the release
  * detail must link "View in spec" onto the live scenario anchor (deep link
  * ruling: group expanded, row scrolled into view and focused). Stub state
- * and fixture project are restored afterwards.
+ * and fixture project are restored afterwards. The repo is `acme/changes`,
+ * a fixture alias of `tasks` with its own stub state — parallel workers
+ * flip states independently.
  */
 const STUB_ADMIN = 'http://127.0.0.1:9876/_admin/state'
 const PROJECT_NAME = 'Changes Fixture'
@@ -29,7 +31,7 @@ async function deleteProjectsByName(page: Page, name: string): Promise<void> {
 }
 
 async function setStubState(page: Page, state: 'initial' | 'after-auth-commit'): Promise<void> {
-  const response = await page.request.post(STUB_ADMIN, { data: { repo: 'acme/tasks', state } })
+  const response = await page.request.post(STUB_ADMIN, { data: { repo: 'acme/changes', state } })
   expect(response.status()).toBe(200)
 }
 
@@ -37,7 +39,7 @@ async function setStubState(page: Page, state: 'initial' | 'after-auth-commit'):
 async function createAnalyzedProject(page: Page, name: string = PROJECT_NAME): Promise<number> {
   await deleteProjectsByName(page, name)
   const createResponse = await page.request.post('/api/projects', {
-    data: { name, description: 'Exercises the changes UI end to end', owner: 'acme', repo: 'tasks' },
+    data: { name, description: 'Exercises the changes UI end to end', owner: 'acme', repo: 'changes' },
   })
   expect(createResponse.status()).toBe(201)
   const project = (await createResponse.json()) as { id: number }

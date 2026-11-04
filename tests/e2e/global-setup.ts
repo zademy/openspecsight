@@ -7,11 +7,13 @@ import { registerGithubRoutes, startGithubStub, stopGithubStub } from '../helper
  * already resolves. Route-table style: register the repos the e2e specs
  * exercise — full pipeline fixtures for `acme/tasks` (tree, blobs, commits),
  * `acme/slowpoke` with a one-shot 5 s blob delay so tests can observe the
- * analysis progress UI mid-run, the unknown-repo case kept explicit so
+ * analysis progress UI mid-run, `acme/changes` and `acme/flow` as fixture
+ * aliases of `tasks` so the state-flipping specs stay isolated from each
+ * other under fullyParallel workers, the unknown-repo case kept explicit so
  * the route table documents every repo a test relies on, and the test-only
- * `/_admin/state` routes that swap `acme/tasks` to the `after-auth-commit`
- * fixture state for sync specs. Everything else keeps answering GitHub's
- * default 404 shape.
+ * `/_admin/state` routes that swap a repo to the `after-auth-commit` fixture
+ * state for sync specs. Everything else keeps answering GitHub's default
+ * 404 shape.
  */
 export default async function globalSetup(): Promise<() => Promise<void>> {
   registerGithubRoutes(
@@ -27,6 +29,12 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   registerStubRepo({ owner: 'acme', repo: 'tasks' })
   registerStubRepo({ owner: 'acme', repo: 'slowpoke', firstBlobDelayMs: 5000 })
+  // `changes` and `flow` serve the same fixtures as `tasks` but keep their
+  // own mutable state: their specs flip commits mid-run, and with
+  // fullyParallel workers a shared state would flip under each other's
+  // syncs. The base `tasks` repo stays reserved for sync.spec.
+  registerStubRepo({ owner: 'acme', repo: 'changes', fixtureAlias: 'tasks' })
+  registerStubRepo({ owner: 'acme', repo: 'flow', fixtureAlias: 'tasks' })
   registerStubAdmin()
 
   await startGithubStub()

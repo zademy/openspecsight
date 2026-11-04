@@ -71,6 +71,12 @@ export interface ScenarioDTO {
   outcome: string
   category: ScenarioCategory
   source: ScenarioSource
+  /**
+   * True when the sync has parked a proposed revision for this scenario —
+   * set only by the feature-detail API, so the spec can mark the row as
+   * "suggested" while the operator's version stays authoritative.
+   */
+  hasProposal?: boolean
 }
 
 /** Release row as served by the changes API. */
@@ -144,6 +150,8 @@ export interface ReleaseListQuery {
  * clients poll it while status is queued or running.
  */
 export interface AnalysisProgress {
+  /** Which pipeline this row belongs to: the initial scan or a sync run. */
+  type: AnalysisType
   status: AnalysisStatus
   progress: number
   step: string

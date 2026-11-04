@@ -1,6 +1,6 @@
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { getDB, type Database } from '../db/client'
-import { annotations, features, scenarios } from '../db/schema'
+import { annotations, features, scenarioRevisions, scenarios } from '../db/schema'
 import { CODE_PREFIX } from './analysis.service'
 import type {
   AnnotationDTO,
@@ -32,7 +32,12 @@ function codeNumber(code: string, category: ScenarioCategory): number {
   return Number.isInteger(parsed) ? parsed : 0
 }
 
-function toScenarioDTO(row: ScenarioRow): ScenarioDTO {
+/**
+ * Shapes a scenario row for the API. `hasProposal` marks scenarios whose
+ * pending sync revision is parked as "suggested" — only the feature detail
+ * passes it, after looking the proposed revision ids up once per feature.
+ */
+function toScenarioDTO(row: ScenarioRow, hasProposal = false): ScenarioDTO {
   return {
     id: row.id,
     code: row.code,
@@ -41,6 +46,7 @@ function toScenarioDTO(row: ScenarioRow): ScenarioDTO {
     outcome: row.outcome,
     category: row.category,
     source: row.source,
+    ...(hasProposal ? { hasProposal: true } : {}),
   }
 }
 
@@ -110,6 +116,25 @@ export function getFeatureDetail(featureId: number): FeatureDetail | null {
   const groups: ScenarioGroupDTO[] = []
   const byContext = new Map<string, ScenarioGroupDTO>()
   const rows = db.select().from(scenarios).where(eq(scenarios.featureId, featureId)).orderBy(asc(scenarios.sortOrder)).all()
+
+  // Scenario ids with a parked "suggested" revision, in one query for the
+  // whole feature (the row ids the spec page badges).
+  const proposedIds = new Set<number>()
+  if (rows.length > 0) {
+    const pending = db.select({ scenarioId: scenarioRevisions.scenarioId })
+      .from(scenarioRevisions)
+      .where(and(
+        inArray(scenarioRevisions.scenarioId, rows.map((row) => row.id)),
+        eq(scenarioRevisions.state, 'proposed'),
+      ))
+      .all()
+    for (const row of pending) {
+      if (row.scenarioId !== null) {
+        proposedIds.add(row.scenarioId)
+      }
+    }
+  }
+
   for (const row of rows) {
     let group = byContext.get(row.context)
     if (!group) {
@@ -117,7 +142,7 @@ export function getFeatureDetail(featureId: number): FeatureDetail | null {
       byContext.set(row.context, group)
       groups.push(group)
     }
-    group.scenarios.push(toScenarioDTO(row))
+    group.scenarios.push(toScenarioDTO(row, proposedIds.has(row.id)))
   }
 
   return { feature, groups }

@@ -6,7 +6,8 @@ import type { ScenarioDTO, ScenarioGroupDTO } from '#shared/types'
  * heading, the rows are the product's "context + action → outcome" motif —
  * action as the strong text, the arrow, then the outcome. Edit and delete
  * bubble up to the feature page, which owns the dialogs and the accordion
- * open-state (deep links expand their group, see [featureId].vue).
+ * open-state (deep links expand their group, see [featureId].vue). A row the
+ * sync could not touch carries the "suggested" badge for its parked revision.
  */
 
 /** Functional category colors (DESIGN.md): happy/edge/error, never decorative. */
@@ -52,6 +53,13 @@ const accordionItems = computed<GroupItem[]>(() => [
               variant="subtle"
               size="sm"
               :label="scenario.source === 'ai' ? 'AI' : 'manual'"
+            />
+            <UBadge
+              v-if="scenario.hasProposal"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              label="suggested"
             />
             <span class="ms-auto flex gap-0.5">
               <UButton

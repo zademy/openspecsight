@@ -7,23 +7,64 @@ everything in a clean UI.
 
 ## Requirements
 
-- Node.js >= 24
+- Node.js >= 24 (`engines` is enforced; older versions fail in `pnpm install`)
 - [pnpm](https://pnpm.io/) 10.x
 
-## Quickstart
+## Quickstart (no API keys)
+
+The app runs end to end without any provider account: the LLM client answers from
+checked-in fixture data when `LLM_MOCK=true`, and public GitHub repositories need no
+token.
 
 ```bash
 # 1. Install dependencies
 pnpm install
 
-# 2. Create your local env file (see .env.example for every key)
+# 2. Create your local env file
 cp .env.example .env
+```
 
-# 3. Start the dev server
+Edit `.env` and set the two values that have no defaults:
+
+```bash
+AUTH_PASSWORD=any-password-you-want    # the single-operator login
+SESSION_SECRET=any-long-random-string  # signs session cookies and encrypts stored PATs
+LLM_MOCK=true                          # fixture LLM answers, no network calls
+```
+
+Start the dev server and open <http://localhost:3000>:
+
+```bash
 pnpm dev
 ```
 
-The app is now available at <http://localhost:3000>.
+Log in with your `AUTH_PASSWORD`, create a project for a public repository (for
+example `nuxt`/`nuxt`), and click **Run analysis** on the overview.
+
+One honest caveat about mock mode: the analysis and syncs read their results from
+`fixtures/llm/*.json`, so the spec you get is demo data, not an analysis of the
+repository you pointed at. The GitHub calls are real; the LLM is the only mocked
+part. It exists so you can exercise the whole flow — create, analyze, edit, sync —
+before configuring a provider.
+
+## Connecting an LLM provider
+
+Fill the `LLM_*` keys in `.env` (and set `LLM_MOCK=false` or remove it):
+
+| Key | Meaning |
+| --- | --- |
+| `LLM_API_STYLE` | `anthropic` (default) or `openai-compatible` |
+| `LLM_BASE_URL` | Provider endpoint; defaults to the MiniMax coding plan endpoint `https://api.minimax.io/anthropic` |
+| `LLM_API_KEY` | Your provider key. Read server-side only; never logged, never returned by the API |
+| `LLM_MODEL` | Model name your provider expects |
+
+Any Anthropic-style endpoint works with `LLM_API_STYLE=anthropic`. For an
+OpenAI-compatible provider (vLLM, OpenRouter, local gateways), set
+`LLM_API_STYLE=openai-compatible` and point `LLM_BASE_URL` at its `/v1` root.
+
+For private repositories, set a `GITHUB_TOKEN` (or paste a personal access token
+when creating a project). Tokens are encrypted with `SESSION_SECRET` before they
+are stored and are never included in an API response.
 
 ## Scripts
 
@@ -33,21 +74,55 @@ The app is now available at <http://localhost:3000>.
 | `pnpm build`      | Build the production bundle                  |
 | `pnpm preview`    | Preview the production build                 |
 | `pnpm lint`       | Run ESLint                                   |
+| `pnpm typecheck`  | Run `tsc -b` over the project                |
 | `pnpm test:unit`  | Run unit tests (vitest)                      |
 | `pnpm test:e2e`   | Run end-to-end tests (Playwright)            |
-
-## Configuration
-
-Configuration is **env-only** — see [`.env.example`](./.env.example) for every key
-and its default. Secrets (GitHub PAT, LLM API key, session secret, auth password)
-are never committed, logged, or returned by the API.
 
 ## Testing
 
 ```bash
 pnpm test:unit   # vitest, tests/unit/**/*.spec.ts and shared/**/*.spec.ts
-pnpm test:e2e    # Playwright; boots the dev server and a local GitHub API stub (127.0.0.1:9876)
+pnpm test:e2e    # Playwright; hermetic: no API keys, no network
 ```
+
+The e2e suite boots a fixture-driven GitHub API stub on `127.0.0.1:9876` (see
+`tests/helpers/github-stub.ts`) and runs against the **production build**
+(`pnpm build && pnpm preview` in `playwright.config.ts`), not the dev server. Two
+reasons, both learned the hard way:
+
+- The dev server's request bridge can drop a JSON body that arrives mid-SSR-render;
+  the built Nitro server serves requests on a plain HTTP server and does not have
+  that problem.
+- The built server reads migrations and LLM fixtures from disk paths resolved next
+  to its own bundle; the build copies `server/db/migrations` and `fixtures/` into
+  `.output` (see the `nitro.hooks.compiled` hook in `nuxt.config.ts`), so tests
+  exercise exactly what a deployment runs.
+
+## Troubleshooting
+
+**`pnpm dev` fails or `pnpm install` warns about engines.** You are on Node < 24.
+The project requires Node 24 or newer; check `node --version`.
+
+**Nothing happens on port 3000, or the page is an old version of the app.** A
+stale server is still listening. Kill it and start again:
+
+```bash
+lsof -ti :3000 | xargs kill
+pnpm dev
+```
+
+**`pnpm preview` can't find LLM fixtures or fails on boot with a migration error.**
+Your `.output` is stale. Migrations and fixtures are copied into `.output` at
+build time, so after pulling changes run `pnpm build` before `pnpm preview`. In a
+pinch, delete `.output` and rebuild.
+
+**e2e tests hang on a POST.** You changed `playwright.config.ts` to use the dev
+server. Keep the production build; see Testing above for why.
+
+**Analysis or sync fails with a provider error.** With `LLM_MOCK=false`, check
+that `LLM_MODEL` is a model your provider actually serves and that `LLM_BASE_URL`
+matches the API style: Anthropic-style endpoints for `anthropic`, an OpenAI-style
+`/v1` root for `openai-compatible`.
 
 ## License
 

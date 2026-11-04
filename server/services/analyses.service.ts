@@ -72,6 +72,7 @@ export function getLatestAnalysis(projectId: number): AnalysisProgress | null {
     return null
   }
   return {
+    type: row.type,
     status: row.status,
     progress: row.progress,
     step: row.step,

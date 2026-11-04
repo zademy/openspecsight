@@ -22,6 +22,12 @@ export interface StubRepoOptions {
   repo: string
   defaultBranch?: string
   /**
+   * Fixture basename to serve this repo's routes from; defaults to `repo`.
+   * Several repos can share one fixture set without sharing the mutable
+   * stub state, so parallel test workers never flip each other's commits.
+   */
+  fixtureAlias?: string
+  /**
    * Delay applied once to the first blob read, to model a slow upstream so
    * tests can observe in-flight states (e.g. the analysis progress UI).
    */
@@ -39,6 +45,8 @@ export type StubRepoState = 'initial' | 'after-auth-commit'
 
 const STUB_REPO_STATES: StubRepoState[] = ['initial', 'after-auth-commit']
 const repoStates = new Map<string, StubRepoState>()
+/** owner/repo keys registered via registerStubRepo — the admin route only flips these. */
+const registeredRepos = new Map<string, StubRepoOptions>()
 
 /** Points a repo's stub routes at a fixture state. Tests clean up after themselves. */
 export function setStubRepoState(repo: string, state: StubRepoState): void {
@@ -69,10 +77,11 @@ export function registerStubAdmin(): void {
       pattern: '/_admin/state',
       handler: (_req, body) => {
         const parsed = JSON.parse(body || '{}') as { repo?: string, state?: string }
-        if (!parsed.repo || !STUB_REPO_STATES.includes(parsed.state as StubRepoState)) {
+        const knownRepos = [...registeredRepos.keys()]
+        if (!parsed.repo || !STUB_REPO_STATES.includes(parsed.state as StubRepoState) || !knownRepos.includes(parsed.repo)) {
           return {
             status: 400,
-            body: { error: `expected { repo, state } with state in [${STUB_REPO_STATES.join(', ')}]` },
+            body: { error: `expected { repo, state } with state in [${STUB_REPO_STATES.join(', ')}] and repo in [${knownRepos.join(', ')}]` },
           }
         }
         setStubRepoState(parsed.repo, parsed.state as StubRepoState)
@@ -86,6 +95,8 @@ export function registerStubAdmin(): void {
 export function registerStubRepo(options: StubRepoOptions): void {
   const { owner, repo } = options
   const repoName = `${owner}/${repo}`
+  const fixtureName = options.fixtureAlias ?? repo
+  registeredRepos.set(repoName, options)
   const base = `/repos/${owner}/${repo}`
   let blobReads = 0
 
@@ -101,7 +112,7 @@ export function registerStubRepo(options: StubRepoOptions): void {
     {
       method: 'GET',
       pattern: new RegExp(`^${base}/git/trees/[^/]+$`),
-      handler: async () => ({ body: await loadFixture(`${repo}-tree.json`) }),
+      handler: async () => ({ body: await loadFixture(`${fixtureName}-tree.json`) }),
     },
     {
       method: 'GET',
@@ -112,7 +123,7 @@ export function registerStubRepo(options: StubRepoOptions): void {
           await new Promise((resolve) => setTimeout(resolve, options.firstBlobDelayMs))
         }
         const sha = new URL(req.url ?? '/', 'http://stub').pathname.split('/').pop() ?? ''
-        const blobs = await loadFixture(`${repo}-blobs.json`) as Record<string, string>
+        const blobs = await loadFixture(`${fixtureName}-blobs.json`) as Record<string, string>
         const content = blobs[sha]
         if (content === undefined) {
           return { status: 404, body: { message: 'Not Found' } }
@@ -130,7 +141,7 @@ export function registerStubRepo(options: StubRepoOptions): void {
         if (getStubRepoState(repoName) === 'after-auth-commit') {
           // The compare fixture lists commits oldest→newest; the REST list
           // endpoint answers newest→oldest.
-          const compare = await loadFixture(`${repo}-compare.json`) as { commits: unknown[] }
+          const compare = await loadFixture(`${fixtureName}-compare.json`) as { commits: unknown[] }
           return { body: [...compare.commits].reverse() }
         }
         return { body: await loadFixture('commits.json') }
@@ -141,7 +152,7 @@ export function registerStubRepo(options: StubRepoOptions): void {
       pattern: new RegExp(`^${base}/compare/[^/]+$`),
       handler: async () => {
         if (getStubRepoState(repoName) === 'after-auth-commit') {
-          return { body: await loadFixture(`${repo}-compare.json`) }
+          return { body: await loadFixture(`${fixtureName}-compare.json`) }
         }
         // No state pushed (or still initial): nothing ever differs.
         return { body: { status: 'identical', ahead_by: 0, behind_by: 0, total_commits: 0, commits: [], files: [] } }
