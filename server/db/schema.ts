@@ -102,3 +102,42 @@ export const jobs = sqliteTable('jobs', {
   createdAt: text('createdAt').notNull(),
   finishedAt: text('finishedAt'),
 })
+
+/**
+ * Feature-to-feature relations shown on the product map. SQLite has no
+ * enum type, so the 9 kinds live at the TS level.
+ */
+export const connectionTypes = ['leads_to', 'triggers', 'depends_on', 'shares_data', 'authenticates', 'notifies', 'configures', 'embeds_in', 'competes_with'] as const
+
+export type ConnectionType = (typeof connectionTypes)[number]
+
+export const connections = sqliteTable('connections', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('projectId').notNull().references(() => projects.id),
+  fromFeatureId: integer('fromFeatureId').notNull().references(() => features.id),
+  toFeatureId: integer('toFeatureId').notNull().references(() => features.id),
+  type: text('type', { enum: connectionTypes }).notNull(),
+})
+
+export const flows = sqliteTable('flows', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  featureId: integer('featureId').notNull().references(() => features.id).unique(),
+  graphJson: text('graphJson').notNull(),
+})
+
+export const conversations = sqliteTable('conversations', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('projectId').notNull().references(() => projects.id),
+  title: text('title').notNull(),
+  pinned: integer('pinned').notNull(), // SQLite booleans: 1 = pinned, 0 = unpinned
+  createdAt: text('createdAt').notNull(),
+})
+
+export const messages = sqliteTable('messages', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  conversationId: integer('conversationId').notNull().references(() => conversations.id),
+  role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+  content: text('content').notNull(),
+  citationsJson: text('citationsJson'),
+  createdAt: text('createdAt').notNull(),
+})

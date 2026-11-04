@@ -72,6 +72,29 @@ export const SyncUpdateSchema = z.object({
 })
 
 /**
+ * Flow diagram of one feature as produced by the analysis: nodes are steps
+ * from start to end, edges the transitions between them; scenarioCode
+ * optionally links a node back to the scenario (SC-xxx) it was built from.
+ */
+export const FlowGraphSchema = z.object({
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      kind: z.enum(['start', 'step', 'decision', 'error', 'end']),
+      label: z.string(),
+      scenarioCode: z.string().optional(),
+    }),
+  ),
+  edges: z.array(
+    z.object({
+      from: z.string(),
+      to: z.string(),
+      label: z.string().optional(),
+    }),
+  ),
+})
+
+/**
  * Payload of POST /api/projects: a project together with its first
  * repository. Empty optional fields (untouched form inputs) normalize to
  * undefined; the server validates the repository against GitHub and defaults

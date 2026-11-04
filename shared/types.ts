@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, FeatureInventorySchema, FeatureScenariosSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -11,6 +11,10 @@ export type FeatureScenarioGroup = FeatureScenarios['groups'][number]
 
 export type SyncUpdate = z.infer<typeof SyncUpdateSchema>
 export type SyncFeatureUpdate = SyncUpdate['featureUpdates'][number]
+
+export type FlowGraph = z.infer<typeof FlowGraphSchema>
+export type FlowNode = FlowGraph['nodes'][number]
+export type FlowEdge = FlowGraph['edges'][number]
 
 // --- Project management ---
 

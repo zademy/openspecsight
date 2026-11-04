@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { features, projects, repositories, scenarios } from '../../server/db/schema'
+import { connections, conversations, features, flows, messages, projects, repositories, scenarios } from '../../server/db/schema'
 
 /**
  * The client is a singleton that reads DATABASE_PATH lazily on the first
@@ -97,6 +97,101 @@ describe('schema roundtrip', () => {
       sortOrder: 0,
       source: 'ai',
     })
+  })
+
+  test('inserts connections, flows, conversations and messages and reads them back', () => {
+    const db = getDB()
+
+    const project = db.insert(projects).values({
+      name: 'Widget Platform',
+      description: 'The widget platform product spec',
+      createdAt: '2026-11-03T00:00:00.000Z',
+    }).returning().get()
+
+    const fromFeature = db.insert(features).values({
+      projectId: project.id,
+      parentId: null,
+      name: 'Login',
+      description: 'Authentication flows for the login page',
+      sortOrder: 1,
+      source: 'ai',
+    }).returning().get()
+
+    const toFeature = db.insert(features).values({
+      projectId: project.id,
+      parentId: null,
+      name: 'Dashboard',
+      description: 'The post-login overview dashboard',
+      sortOrder: 2,
+      source: 'ai',
+    }).returning().get()
+
+    const graph = {
+      nodes: [
+        { id: 'start', kind: 'start', label: 'User opens the login page' },
+        { id: 'end', kind: 'end', label: 'User is signed in' },
+      ],
+      edges: [{ from: 'start', to: 'end', label: 'credentials valid' }],
+    }
+
+    const connection = db.insert(connections).values({
+      projectId: project.id,
+      fromFeatureId: fromFeature.id,
+      toFeatureId: toFeature.id,
+      type: 'leads_to',
+    }).returning().get()
+
+    const flow = db.insert(flows).values({
+      featureId: fromFeature.id,
+      graphJson: JSON.stringify(graph),
+    }).returning().get()
+
+    const conversation = db.insert(conversations).values({
+      projectId: project.id,
+      title: 'Why does the dashboard load slowly?',
+      pinned: 1,
+      createdAt: '2026-11-04T00:00:00.000Z',
+    }).returning().get()
+
+    const message = db.insert(messages).values({
+      conversationId: conversation.id,
+      role: 'user',
+      content: 'Why does the dashboard load slowly for large accounts?',
+      citationsJson: null,
+      createdAt: '2026-11-04T00:00:00.000Z',
+    }).returning().get()
+
+    expect(connection).toEqual({
+      id: expect.any(Number),
+      projectId: project.id,
+      fromFeatureId: fromFeature.id,
+      toFeatureId: toFeature.id,
+      type: 'leads_to',
+    })
+    expect(flow).toEqual({ id: expect.any(Number), featureId: fromFeature.id, graphJson: JSON.stringify(graph) })
+    expect(conversation).toEqual({
+      id: expect.any(Number),
+      projectId: project.id,
+      title: 'Why does the dashboard load slowly?',
+      pinned: 1,
+      createdAt: '2026-11-04T00:00:00.000Z',
+    })
+    expect(message).toEqual({
+      id: expect.any(Number),
+      conversationId: conversation.id,
+      role: 'user',
+      content: 'Why does the dashboard load slowly for large accounts?',
+      citationsJson: null,
+      createdAt: '2026-11-04T00:00:00.000Z',
+    })
+
+    // A feature has at most one flow; conversation pinning flips 1 ↔ 0.
+    expect(() => db.insert(flows).values({ featureId: fromFeature.id, graphJson: '{}' }).run()).toThrow()
+    const unpinned = db.update(conversations).set({ pinned: 0 }).where(eq(conversations.id, conversation.id)).returning().get()
+    expect(unpinned).toEqual({ ...conversation, pinned: 0 })
+
+    db.delete(messages).where(eq(messages.id, message.id)).run()
+    expect(db.select({ id: messages.id }).from(messages).all()).toHaveLength(0)
   })
 })
 
