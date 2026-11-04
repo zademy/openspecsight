@@ -197,11 +197,18 @@ export function updateScenario(id: number, patch: UpdateScenarioInput): Scenario
   return toScenarioDTO(updated)
 }
 
-/** Removes a scenario; false when it was already gone. */
+/**
+ * Removes a scenario together with its annotations — `annotations.scenarioId`
+ * has no DB-level cascade, so the service does the cleanup in one
+ * transaction, annotations first. False when it was already gone.
+ */
 export function deleteScenario(id: number): boolean {
   const db = getDB()
-  const row = db.delete(scenarios).where(eq(scenarios.id, id)).run()
-  return row.changes > 0
+  return db.transaction((tx: Transaction): boolean => {
+    tx.delete(annotations).where(eq(annotations.scenarioId, id)).run()
+    const row = tx.delete(scenarios).where(eq(scenarios.id, id)).run()
+    return row.changes > 0
+  })
 }
 
 /** True while the scenario row exists. */

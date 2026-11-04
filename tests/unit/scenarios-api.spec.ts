@@ -1,6 +1,7 @@
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { features, projects, scenarios } from '../../server/db/schema'
+import { annotations, features, projects, scenarios } from '../../server/db/schema'
 import {
   addAnnotation,
   createManualScenario,
@@ -129,6 +130,20 @@ describe('deleteScenario', () => {
     const id = seedScenario()
     expect(deleteScenario(id)).toBe(true)
     expect(deleteScenario(id)).toBe(false)
+  })
+
+  test('removes the scenario together with its annotations', () => {
+    const db = getDB()
+    const scenarioId = seedScenario()
+    addAnnotation(scenarioId, { body: 'Support asked about this case' })
+    addAnnotation(scenarioId, { body: 'Also relevant for SSO' })
+
+    expect(deleteScenario(scenarioId)).toBe(true)
+
+    // annotations.scenarioId has no DB-level cascade, so the service must
+    // clean them up itself — Task 10's sync deletes scenarios too.
+    expect(db.select({ id: scenarios.id }).from(scenarios).where(eq(scenarios.id, scenarioId)).all()).toEqual([])
+    expect(db.select().from(annotations).all()).toEqual([])
   })
 
   test('frees its code: the next manual scenario reuses the number', () => {
