@@ -122,6 +122,19 @@ function resolveMigrationsFolder(): string {
     }
   }
 
+  // 4. Plugin-time code runs while the entry module is still importing its
+  // chunks, so `import.meta.url` can still be nitro's `file:///_entry.js`
+  // placeholder and the walk above starts from a fake root. The process cwd
+  // is the project root (or the output dir) on every layout this repo runs
+  // in — dev, preview, tests — making source and bundled folders reachable.
+  for (const base of [process.cwd(), join(process.cwd(), '.output', 'server')]) {
+    for (const candidate of [join(base, 'server', 'db', 'migrations'), join(base, 'db', 'migrations')]) {
+      if (hasJournal(candidate)) {
+        return candidate
+      }
+    }
+  }
+
   throw new Error('Drizzle migrations folder not found; expected server/db/migrations in the project or bundled next to the server entry')
 }
 

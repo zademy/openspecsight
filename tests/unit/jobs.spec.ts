@@ -7,7 +7,7 @@ import {
   getLatestAnalysis,
   startInitialAnalysis,
 } from '../../server/services/analyses.service'
-import { enqueueJob, kickJobProcessing, processNextJobs, registerJobHandler } from '../../server/services/jobs.service'
+import { enqueueJob, kickJobProcessing, processNextJobs, registerJobHandler, sweepInterruptedJobs } from '../../server/services/jobs.service'
 
 /**
  * Jobs queue tests run against a :memory: database with no plugin registered,
@@ -166,6 +166,53 @@ describe('processNextJobs', () => {
 
     expect(seen).toEqual([{ anything: true }])
     expect(getJob(jobId)).toMatchObject({ status: 'done' })
+  })
+})
+
+describe('sweepInterruptedJobs', () => {
+  /** Inserts a job row in an arbitrary state; defaults to a running orphan. */
+  function insertJob(patch: Partial<typeof jobs.$inferInsert> = {}): number {
+    const row = getDB().insert(jobs).values({
+      type: 't-sweep',
+      payloadJson: '{}',
+      status: 'running',
+      attempts: 1,
+      error: null,
+      createdAt: '2026-11-03T00:00:00.000Z',
+      finishedAt: null,
+      ...patch,
+    }).returning().get()
+    return row.id
+  }
+
+  test('requeues an interrupted running job and spends one attempt', () => {
+    const jobId = insertJob({ status: 'running', attempts: 1 })
+
+    const requeued = sweepInterruptedJobs()
+
+    expect(requeued).toBe(1)
+    expect(getJob(jobId)).toMatchObject({ status: 'queued', attempts: 2, error: null, finishedAt: null })
+  })
+
+  test('parks an interrupted job that has exhausted its attempts', () => {
+    const jobId = insertJob({ status: 'running', attempts: 2 })
+
+    sweepInterruptedJobs()
+
+    const job = getJob(jobId)
+    expect(job).toMatchObject({ status: 'error', attempts: 3, error: 'interrupted by restart' })
+    expect(job?.finishedAt).toBeTypeOf('string')
+  })
+
+  test('queued and done rows are untouched', () => {
+    const queuedId = insertJob({ status: 'queued', attempts: 0 })
+    const doneId = insertJob({ status: 'done', attempts: 1, error: null, finishedAt: '2026-11-03T00:01:00.000Z' })
+
+    const requeued = sweepInterruptedJobs()
+
+    expect(requeued).toBe(0)
+    expect(getJob(queuedId)).toMatchObject({ status: 'queued', attempts: 0, error: null, finishedAt: null })
+    expect(getJob(doneId)).toMatchObject({ status: 'done', attempts: 1, error: null })
   })
 })
 

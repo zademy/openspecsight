@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { getDB } from '../db/client'
 import { jobs } from '../db/schema'
 import { projectExists } from './projects.service'
@@ -19,6 +19,9 @@ const MAX_ATTEMPTS = 3
 
 /** Note stored on jobs whose payload projectId no longer exists. */
 const PROJECT_DELETED_NOTE = 'project deleted'
+
+/** Note stored on running jobs a restart orphaned and could not requeue. */
+const INTERRUPTED_NOTE = 'interrupted by restart'
 
 /** Serialize claims around the registry map (populated at plugin time). */
 const handlers = new Map<string, JobHandler>()
@@ -41,6 +44,30 @@ export function enqueueJob(type: string, payload: JobPayload): number {
     finishedAt: null,
   }).returning().get()
   return row.id
+}
+
+/**
+ * Boot-time recovery for jobs a crashed process left `running`: claimNextJob
+ * only takes `queued` rows, so an orphaned row would 409-block its project's
+ * sync/analysis forever. Requeues every orphaned row (spending one attempt)
+ * and parks those that now reached MAX_ATTEMPTS as `error` with a readable
+ * note — queued and done rows are untouched. Re-running is safe: the
+ * pipelines are idempotent-clean-slate (the analysis wipes and rebuilds; the
+ * sync applies everything in one transaction).
+ */
+export function sweepInterruptedJobs(): number {
+  const db = getDB()
+  return db.transaction((tx): number => {
+    const requeued = tx.update(jobs)
+      .set({ status: 'queued', attempts: sql`${jobs.attempts} + 1` })
+      .where(eq(jobs.status, 'running'))
+      .run()
+    tx.update(jobs)
+      .set({ status: 'error', error: INTERRUPTED_NOTE, finishedAt: nowISO() })
+      .where(and(eq(jobs.status, 'queued'), gte(jobs.attempts, MAX_ATTEMPTS)))
+      .run()
+    return requeued.changes
+  })
 }
 
 interface ClaimedJob {
