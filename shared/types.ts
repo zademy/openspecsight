@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateDigestSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateDigestSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SendDigestSchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -365,4 +365,19 @@ export interface DigestSummary {
 export interface DigestDetail extends DigestSummary {
   projectId: number
   blocks: ContentBlocks
+}
+
+/** Payload of POST /api/digests/:id/send. */
+export type SendDigestInput = z.infer<typeof SendDigestSchema>
+
+/** POST /api/digests/:id/send — the honest delivery result. */
+export interface SendDigestResult {
+  sent: boolean
+  /** Why nothing went out; absent when the digest was emailed. */
+  reason?: string
+}
+
+/** GET /api/mail-status — whether SMTP env is complete enough to send mail. */
+export interface MailStatus {
+  configured: boolean
 }

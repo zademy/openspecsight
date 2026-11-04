@@ -9,6 +9,10 @@ import { login } from './helpers/login'
  * (committedAt 2026-11-02 in the stub fixtures): the on-demand digest with
  * the UI's default range, the list it appears in, the detail page rendering
  * the draft's blocks through ContentBlocks, and the "Digests" rail entry.
+ * The email action is checked in both places against the real e2e
+ * environment, where SMTP is deliberately unset: the detail page shows the
+ * disabled button with the missing-config explanation, and the send API
+ * answers the honest `{ sent: false, reason: 'SMTP is not configured' }`.
  * An API-driven pass pins the explicit-range request and the honest 422 for
  * a range without releases. Each test owns one stub repo and project name
  * (both flip stub state and run under fullyParallel workers — a shared repo
@@ -134,6 +138,12 @@ test.describe('digests', () => {
       await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible()
       await expect(page.getByRole('listitem').filter({ hasText: 'Add tasks module' })).toBeVisible()
 
+      // SMTP-off honesty: the email action is disabled and names what is
+      // missing — it never pretends a digest went out.
+      const emailButton = page.getByRole('button', { name: 'Email to recipients' })
+      await expect(emailButton).toBeDisabled()
+      await expect(page.getByText('SMTP is not configured — set SMTP_* in .env to enable email')).toBeVisible()
+
       // The stored digest carries the fixture blocks verbatim and no email stamp.
       const digestId = Number(path.basename(page.url()))
       const db = openServerDb()
@@ -179,6 +189,23 @@ test.describe('digests', () => {
       })
       expect(empty.status()).toBe(422)
       expect(((await empty.json()) as { message: string }).message).toBe('No releases in that range; nothing to digest')
+
+      // Email delivery with SMTP unset answers 200 with the honest result —
+      // never a fake "sent" — and emailedAt stays null. DIGEST_RECIPIENTS is
+      // set in the e2e env, so the named blocker is SMTP itself.
+      const mailStatus = await page.request.get('/api/mail-status')
+      expect(mailStatus.status()).toBe(200)
+      expect(((await mailStatus.json()) as { configured: boolean }).configured).toBe(false)
+
+      const send = await page.request.post(`/api/digests/${digests[0]!.id}/send`, { data: {} })
+      expect(send.status()).toBe(200)
+      expect(await send.json()).toEqual({ sent: false, reason: 'SMTP is not configured' })
+
+      const afterSend = await page.request.get(`/api/digests/${digests[0]!.id}`)
+      expect(((await afterSend.json()) as { emailedAt: string | null }).emailedAt).toBeNull()
+
+      const unknown = await page.request.post('/api/digests/999999/send', { data: {} })
+      expect(unknown.status()).toBe(404)
     } finally {
       await page.request.delete(`/api/projects/${projectId}`)
     }

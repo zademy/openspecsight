@@ -243,3 +243,8 @@ export const CreateDigestSchema = z.object({
   (range) => range.rangeFrom === undefined || range.rangeTo === undefined || range.rangeFrom <= range.rangeTo,
   { message: 'rangeFrom must not be after rangeTo' },
 )
+
+/** Payload of POST /api/digests/:id/send: force re-sends an emailed digest. */
+export const SendDigestSchema = z.object({
+  force: z.boolean().default(false),
+})

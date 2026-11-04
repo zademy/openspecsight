@@ -1,4 +1,4 @@
-import type { CreateDigestInput, DigestDetail, DigestSummary } from '#shared/types'
+import type { CreateDigestInput, DigestDetail, DigestSummary, SendDigestInput, SendDigestResult } from '#shared/types'
 
 /**
  * Digest data for the digests pages: thin $fetch wrappers over the digests
@@ -23,5 +23,10 @@ export function useDigests() {
     return $fetch<{ jobId: number }>(`/api/projects/${projectId}/digests`, { method: 'POST', body: input })
   }
 
-  return { list, get, create }
+  /** Emails the digest to DIGEST_RECIPIENTS; force re-sends an emailed one. */
+  function send(digestId: number | string, input: Partial<SendDigestInput> = {}): Promise<SendDigestResult> {
+    return $fetch<SendDigestResult>(`/api/digests/${digestId}/send`, { method: 'POST', body: { force: false, ...input } })
+  }
+
+  return { list, get, create, send }
 }

@@ -28,6 +28,9 @@ export default defineConfig({
       SESSION_SECRET: 'test-secret',
       DATABASE_PATH: './data/test-e2e.db',
       GITHUB_API_BASE: 'http://127.0.0.1:9876',
+      // Recipients without SMTP: digest delivery fails with the honest
+      // 'SMTP is not configured' reason, which the digests spec pins.
+      DIGEST_RECIPIENTS: 'digests-e2e@example.com',
     },
   },
 })

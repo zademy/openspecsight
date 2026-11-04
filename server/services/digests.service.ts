@@ -3,8 +3,10 @@ import { getDB } from '../db/client'
 import { digests, features, jobs, releases, scenarioRevisions } from '../db/schema'
 import { ContentBlocksSchema, DigestDraftSchema } from '../../shared/schemas'
 import type { ContentBlocks, DigestDetail, DigestSummary, ReleaseCounts } from '../../shared/types'
+import { renderBlocksHtml, renderBlocksText } from '../utils/mailRenderer'
 import { enqueueJob } from './jobs.service'
 import { createLlmClient, type LlmClient } from './llm.service'
+import { createMailService, MailNotConfiguredError, type MailService } from './mail.service'
 import { projectExists } from './projects.service'
 
 /**
@@ -40,6 +42,26 @@ export class DigestInProgressError extends Error {
   }
 }
 
+/** Error thrown when delivery is asked for a digest that does not exist. */
+export class DigestNotFoundError extends Error {
+  constructor(
+    readonly digestId: number,
+  ) {
+    super(`No digest with id ${digestId}`)
+    this.name = 'DigestNotFoundError'
+  }
+}
+
+/** Error thrown when an already-emailed digest is sent again without `force`. */
+export class DigestAlreadyEmailedError extends Error {
+  constructor(
+    readonly digestId: number,
+  ) {
+    super(`Digest ${digestId} was already emailed; pass force to send it again`)
+    this.name = 'DigestAlreadyEmailedError'
+  }
+}
+
 /** What the aggregation stage feeds the LLM prompt. */
 export interface DigestAggregation {
   releaseCount: number
@@ -54,7 +76,8 @@ export interface WeeklyDigestOutcome {
   /** The stored digest, or null when generation failed for this project. */
   digestId: number | null
   sent: boolean
-  reason: string
+  /** Why nothing went out; absent when the digest was emailed. */
+  reason?: string
   /** Set when generation failed; other projects continue regardless. */
   error?: string
 }
@@ -302,13 +325,57 @@ export function projectsWithReleasesInRange(rangeFrom: string, rangeTo: string):
   )].sort((a, b) => a - b)
 }
 
+/** Dependency seams for email delivery; production builds the SMTP service per call. */
+export interface DeliverDigestDeps {
+  mail?: MailService
+  /** Re-send an already-emailed digest (updates emailedAt). */
+  force?: boolean
+}
+
 /**
- * Email delivery — not wired yet. Task 4 replaces this body with the
- * MailService path (rendered blocks via the mail renderer, `emailedAt` set
- * on success); until then every delivery honestly reports "not sent".
+ * Emails one digest to DIGEST_RECIPIENTS (comma-separated, trimmed). The
+ * blocks go through the mail renderer as text + html; the subject is the
+ * digest title. Every "not sent" answer is honest and specific, and a
+ * refused or failed delivery never stamps `emailedAt`: no recipients or no
+ * SMTP config answer `{ sent: false, reason: ... }`, an already-emailed
+ * digest throws unless `force` re-sends, and only a real transport success
+ * stamps the time. Unexpected send failures propagate — callers decide
+ * whether that is fatal (API → 500) or per-project (weekly run).
  */
-export async function deliverDigest(_digestId: number): Promise<{ sent: boolean, reason: string }> {
-  return { sent: false, reason: 'delivery lands in task 4' }
+export async function deliverDigest(digestId: number, deps?: DeliverDigestDeps): Promise<{ sent: boolean, reason?: string }> {
+  const digest = getDigest(digestId)
+  if (!digest) {
+    throw new DigestNotFoundError(digestId)
+  }
+  if (digest.emailedAt && !deps?.force) {
+    throw new DigestAlreadyEmailedError(digestId)
+  }
+
+  const recipients = (process.env.DIGEST_RECIPIENTS ?? '')
+    .split(',')
+    .map((address) => address.trim())
+    .filter((address) => address !== '')
+  if (recipients.length === 0) {
+    return { sent: false, reason: 'DIGEST_RECIPIENTS is not set' }
+  }
+
+  const mail = deps?.mail ?? createMailService()
+  try {
+    await mail.send({
+      to: recipients,
+      subject: digest.title,
+      text: renderBlocksText(digest.blocks),
+      html: renderBlocksHtml(digest.blocks),
+    })
+  } catch (error) {
+    if (error instanceof MailNotConfiguredError) {
+      return { sent: false, reason: 'SMTP is not configured' }
+    }
+    throw error
+  }
+
+  getDB().update(digests).set({ emailedAt: nowISO() }).where(eq(digests.id, digestId)).run()
+  return { sent: true }
 }
 
 /**
@@ -326,13 +393,22 @@ export async function runWeeklyDigests(deps?: DigestDeps & { enabled?: boolean }
 
   const outcomes: WeeklyDigestOutcome[] = []
   for (const projectId of projectsWithReleasesInRange(rangeFrom, rangeTo)) {
+    // Generation and delivery report separately — one honest reason each,
+    // and a delivery failure still names the digest it produced.
+    let digestId: number
     try {
-      const digestId = await generateDigest(projectId, rangeFrom, rangeTo, { llm: deps?.llm })
+      digestId = await generateDigest(projectId, rangeFrom, rangeTo, { llm: deps?.llm })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      outcomes.push({ projectId, digestId: null, sent: false, reason: 'digest generation failed', error: message })
+      continue
+    }
+    try {
       const delivery = await deliverDigest(digestId)
       outcomes.push({ projectId, digestId, sent: delivery.sent, reason: delivery.reason })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      outcomes.push({ projectId, digestId: null, sent: false, reason: 'digest generation failed', error: message })
+      outcomes.push({ projectId, digestId, sent: false, reason: 'digest delivery failed', error: message })
     }
   }
   return { enabled: true, rangeFrom, rangeTo, outcomes }

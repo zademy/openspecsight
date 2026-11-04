@@ -12,10 +12,17 @@ import { runWeeklyDigests } from '../../services/digests.service'
 export default defineTask({
   meta: {
     name: 'digests:weekly',
-    description: 'Generate (and, once Task 4 wires delivery, email) a weekly digest for every project with releases in the past week',
+    description: 'Generate and email a weekly digest for every project with releases in the past week',
   },
   async run() {
     const run = await runWeeklyDigests()
+    for (const outcome of run.outcomes) {
+      if (!outcome.sent) {
+        // Quiet on purpose: an unsent digest is a normal state (no SMTP,
+        // no recipients), not an error — the reason is the record.
+        console.info(`[digests:weekly] project ${outcome.projectId} not emailed: ${outcome.reason}`)
+      }
+    }
     return { result: run }
   },
 })

@@ -17,7 +17,9 @@ import {
   aggregateDigest,
   defaultDigestRange,
   deliverDigest,
+  DigestAlreadyEmailedError,
   DigestInProgressError,
+  DigestNotFoundError,
   DigestRangeEmptyError,
   generateDigest,
   getDigest,
@@ -28,6 +30,7 @@ import {
   startDigest,
 } from '../../server/services/digests.service'
 import type { LlmClient } from '../../server/services/llm.service'
+import { MailNotConfiguredError, type MailSendOptions, type MailService } from '../../server/services/mail.service'
 
 /**
  * Digest tests run against a :memory: database seeded with the rows a sync
@@ -296,11 +299,16 @@ describe('weekly digests', () => {
     expect(listDigests(projectId)).toHaveLength(0)
   })
 
-  test('runWeeklyDigests generates one digest per active project and reports the delivery stub', async () => {
+  test('runWeeklyDigests generates one digest per active project and reports the honest delivery state', async () => {
     // Today-relative seeds: the weekly run uses the default (today-relative) range.
     seedRelease({ title: 'In range', committedAt: daysAgoIso(2) })
     seedRelease({ title: 'Only old work', committedAt: '2026-10-01T10:00:00Z', projectId: emptyProjectId })
     const llm = scriptedLlm({ title: 'Weekly digest', blocks: [{ type: 'paragraph', text: 'One release shipped.' }] })
+    // A deployment without recipients configured: the run stays quiet, no throw.
+    delete process.env.DIGEST_RECIPIENTS
+    delete process.env.SMTP_HOST
+    delete process.env.SMTP_USER
+    delete process.env.SMTP_PASS
 
     const run = await runWeeklyDigests({ enabled: true, llm })
     expect(run.enabled).toBe(true)
@@ -308,7 +316,8 @@ describe('weekly digests', () => {
     expect(run.outcomes).toHaveLength(1)
     expect(run.outcomes[0]!.projectId).toBe(projectId)
     expect(run.outcomes[0]!.sent).toBe(false)
-    expect(run.outcomes[0]!.reason).toBe('delivery lands in task 4')
+    expect(run.outcomes[0]!.reason).toBe('DIGEST_RECIPIENTS is not set')
+    expect(getDigest(run.outcomes[0]!.digestId!)?.emailedAt).toBeNull()
     expect(listDigests(projectId)).toHaveLength(1)
     expect(listDigests(emptyProjectId)).toHaveLength(0)
   })
@@ -362,9 +371,113 @@ describe('weekly digests', () => {
   })
 })
 
-describe('deliverDigest stub', () => {
-  test('reports that delivery is not wired yet and sends nothing', async () => {
-    const result = await deliverDigest(1)
-    expect(result).toEqual({ sent: false, reason: 'delivery lands in task 4' })
+describe('deliverDigest', () => {
+  /** Scripts the mail seam; `unconfigured` reproduces an incomplete SMTP env. */
+  function fakeMail(behavior: 'ok' | 'unconfigured' = 'ok'): MailService & { calls: MailSendOptions[] } {
+    const calls: MailSendOptions[] = []
+    return {
+      calls,
+      isConfigured: () => behavior === 'ok',
+      async send(options) {
+        if (behavior === 'unconfigured') {
+          throw new MailNotConfiguredError(['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'])
+        }
+        calls.push(options)
+        return { messageId: `msg-${calls.length}` }
+      },
+    }
+  }
+
+  /** The env keys delivery reads; cleared so each test scripts its own state. */
+  function cleanDeliveryEnv(): void {
+    delete process.env.DIGEST_RECIPIENTS
+    delete process.env.SMTP_HOST
+    delete process.env.SMTP_USER
+    delete process.env.SMTP_PASS
+    delete process.env.SMTP_FROM
+  }
+
+  async function seedDigest(): Promise<number> {
+    seedRelease({ title: 'In range', committedAt: daysAgoIso(2) })
+    return generateDigest(projectId, defaultDigestRange().rangeFrom, defaultDigestRange().rangeTo, {
+      llm: scriptedLlm({
+        title: 'Weekly digest',
+        blocks: [
+          { type: 'heading', text: 'What changed' },
+          { type: 'paragraph', text: 'One release shipped.' },
+          { type: 'list', items: ['In range'] },
+        ],
+      }),
+    })
+  }
+
+  beforeEach(() => {
+    cleanDeliveryEnv()
+  })
+
+  afterAll(() => {
+    cleanDeliveryEnv()
+  })
+
+  test('sends the rendered blocks to DIGEST_RECIPIENTS and stamps emailedAt', async () => {
+    process.env.DIGEST_RECIPIENTS = ' lead@example.com , team@example.com, '
+    const digestId = await seedDigest()
+    const mail = fakeMail()
+
+    const result = await deliverDigest(digestId, { mail })
+
+    expect(result).toEqual({ sent: true })
+    expect(mail.calls).toHaveLength(1)
+    expect(mail.calls[0]!.to).toEqual(['lead@example.com', 'team@example.com'])
+    expect(mail.calls[0]!.subject).toBe('Weekly digest')
+    expect(mail.calls[0]!.text).toContain('## What changed')
+    expect(mail.calls[0]!.html).toContain('<h2>What changed</h2>')
+    expect(mail.calls[0]!.html).toContain('<ul><li>In range</li></ul>')
+    expect(getDigest(digestId)?.emailedAt).not.toBeNull()
+  })
+
+  test('an SMTP failure reports honestly and leaves emailedAt null', async () => {
+    process.env.DIGEST_RECIPIENTS = 'lead@example.com'
+    const digestId = await seedDigest()
+    const mail = fakeMail('unconfigured')
+
+    const result = await deliverDigest(digestId, { mail })
+
+    expect(result).toEqual({ sent: false, reason: 'SMTP is not configured' })
+    expect(getDigest(digestId)?.emailedAt).toBeNull()
+  })
+
+  test('no recipients reports honestly without calling mail', async () => {
+    const digestId = await seedDigest()
+    const mail = fakeMail()
+
+    const result = await deliverDigest(digestId, { mail })
+
+    expect(result).toEqual({ sent: false, reason: 'DIGEST_RECIPIENTS is not set' })
+    expect(mail.calls).toHaveLength(0)
+    expect(getDigest(digestId)?.emailedAt).toBeNull()
+  })
+
+  test('a second send without force refuses; force re-sends and updates emailedAt', async () => {
+    process.env.DIGEST_RECIPIENTS = 'lead@example.com'
+    const digestId = await seedDigest()
+    const mail = fakeMail()
+
+    expect(await deliverDigest(digestId, { mail })).toEqual({ sent: true })
+    const firstStamp = getDigest(digestId)?.emailedAt
+    expect(firstStamp).not.toBeNull()
+
+    await expect(deliverDigest(digestId, { mail })).rejects.toThrow(DigestAlreadyEmailedError)
+    expect(getDigest(digestId)?.emailedAt).toBe(firstStamp)
+
+    // The stamp is ms-resolution; the pause guarantees "updated" is observable.
+    await new Promise((resolve) => setTimeout(resolve, 15))
+    expect(await deliverDigest(digestId, { mail, force: true })).toEqual({ sent: true })
+    expect(mail.calls).toHaveLength(2)
+    expect(getDigest(digestId)?.emailedAt).not.toBe(firstStamp)
+  })
+
+  test('an unknown digest throws DigestNotFoundError', async () => {
+    await expect(deliverDigest(424242, { mail: fakeMail() })).rejects.toThrow(DigestNotFoundError)
   })
 })
