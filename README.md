@@ -68,6 +68,15 @@ For private repositories, set a `GITHUB_TOKEN` (or paste a personal access token
 when creating a project). Tokens are encrypted with `SESSION_SECRET` before they
 are stored and are never included in an API response.
 
+## Automatic syncs (GitHub webhook)
+
+Set `GITHUB_WEBHOOK_SECRET` in `.env`, then add a webhook on the GitHub
+repository: payload URL `http://your-host/api/webhooks/github`, content type
+`application/json`, and that secret. Requests are verified against their HMAC
+signature, and a push to a branch a project watches starts that project's sync
+automatically. The Settings page shows the exact URL and whether the secret is
+configured; without it the endpoint answers 503 and enqueues nothing.
+
 ## Product map, flows, and Ask
 
 The analysis reads more out of your code than the scenario list. It records how

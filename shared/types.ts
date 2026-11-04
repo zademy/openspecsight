@@ -382,6 +382,15 @@ export interface MailStatus {
   configured: boolean
 }
 
+/**
+ * GET /api/webhook-status — the URL to paste into GitHub plus whether
+ * GITHUB_WEBHOOK_SECRET is set. The secret itself is never included.
+ */
+export interface WebhookStatus {
+  configured: boolean
+  webhookUrl: string
+}
+
 // --- Voices and release notes ---
 
 /** Payload of POST /api/projects/:id/voices. */

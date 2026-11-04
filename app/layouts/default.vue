@@ -6,7 +6,10 @@
         <span class="font-semibold">OpenSpecSight</span>
       </div>
 
-      <UColorModeButton />
+      <div class="flex items-center gap-1">
+        <UButton to="/settings" icon="i-lucide-settings" color="neutral" variant="ghost" aria-label="Settings" />
+        <UColorModeButton />
+      </div>
     </header>
 
     <div class="flex flex-1 items-stretch">

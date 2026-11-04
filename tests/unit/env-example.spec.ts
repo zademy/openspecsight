@@ -2,9 +2,11 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 
 /**
- * The Global Constraints mandate exactly these 19 env keys. `GITHUB_API_BASE`
- * is also present in the file as a deliberate extra (used by the e2e webServer
- * to point the app at the local GitHub stub).
+ * The Global Constraints mandate exactly these 19 env keys. Two documented
+ * extras are also present, both deliberate: `GITHUB_API_BASE` (used by the
+ * e2e webServer to point the app at the local GitHub stub) and
+ * `GITHUB_WEBHOOK_SECRET` (Task 9's webhook; empty until the operator sets
+ * it, which the webhook honestly reports).
  */
 const MANDATED_KEYS: readonly string[] = [
   'DATABASE_PATH',
@@ -43,11 +45,12 @@ describe('.env.example', () => {
     expect(envExample).toMatch(new RegExp(`^${key}=`, 'm'))
   })
 
-  test('declares no keys beyond the mandated set plus the documented GITHUB_API_BASE extra', () => {
+  test('declares no keys beyond the mandated set plus the two documented extras', () => {
     const declared = declaredKeys()
-    const unexpected = declared.filter((key) => key !== 'GITHUB_API_BASE' && !MANDATED_KEYS.includes(key))
+    const extras = ['GITHUB_API_BASE', 'GITHUB_WEBHOOK_SECRET']
+    const unexpected = declared.filter((key) => !extras.includes(key) && !MANDATED_KEYS.includes(key))
 
     expect(unexpected).toEqual([])
-    expect(declared).toHaveLength(MANDATED_KEYS.length + 1)
+    expect(declared).toHaveLength(MANDATED_KEYS.length + extras.length)
   })
 })

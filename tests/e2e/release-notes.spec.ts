@@ -148,11 +148,12 @@ test.describe('release notes', () => {
 
       // The guard stays exact: only /api/notes/public/ is exempt, an
       // unrelated /api/notes/* path still 401s; the webhook path is exempt
-      // (route comes in Task 9, so it 404s — the point is not-401); the
+      // from the session guard but authenticates by signature instead —
+      // an unsigned delivery answers 401 (Task 9's route verifies it); the
       // general API guard and the page middleware are untouched.
       expect((await anon.request.get('/api/notes/publicX')).status()).toBe(401)
       expect((await anon.request.get('/api/notes/public/')).status()).not.toBe(401)
-      expect((await anon.request.post('/api/webhooks/github')).status()).not.toBe(401)
+      expect((await anon.request.post('/api/webhooks/github')).status()).toBe(401)
       expect((await anon.request.get('/api/projects')).status()).toBe(401)
       await anon.goto(`/projects/${projectId}`)
       await expect(anon).toHaveURL(/\/login/)
