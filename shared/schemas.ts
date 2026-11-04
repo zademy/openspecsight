@@ -70,3 +70,21 @@ export const SyncUpdateSchema = z.object({
     }),
   ),
 })
+
+/**
+ * Payload of POST /api/projects: a project together with its first
+ * repository. Empty optional fields (untouched form inputs) normalize to
+ * undefined; the server validates the repository against GitHub and defaults
+ * the branch before anything is stored.
+ */
+export const CreateProjectSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(120),
+  description: z.string().trim().max(500),
+  owner: z.string().trim().min(1, 'Owner is required').max(100),
+  repo: z.string().trim().min(1, 'Repository is required').max(100),
+  branch: z.string().trim().optional().transform((v) => (v === '' ? undefined : v)),
+  pat: z.string().trim().optional().transform((v) => (v === '' ? undefined : v)),
+})
+
+/** Payload of POST /api/projects/:id/repositories: another repository of an existing project. */
+export const AddRepositorySchema = CreateProjectSchema.pick({ owner: true, repo: true, branch: true, pat: true })

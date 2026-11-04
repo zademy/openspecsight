@@ -1,5 +1,5 @@
-import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { existsSync, mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import SQLite from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -88,6 +88,43 @@ export function resetDB(): void {
   }
 }
 
+/**
+ * Locates the drizzle migrations folder at runtime. The module can run from
+ * three layouts, and none of them can be hardcoded:
+ * 1. Source layout (unit tests, `import.meta.url` next to `migrations/`).
+ * 2. Bundled dev builds (`nuxt dev` runs server code from `.nuxt/dev/`).
+ * 3. Production builds (`.output/server/`), where the Nuxt build copies the
+ *    migrations next to the server entry (see nitro.hooks.compiled in
+ *    nuxt.config.ts).
+ * Walking up from this module covers 2 and 3 without depending on the cwd.
+ */
+function resolveMigrationsFolder(): string {
+  const hasJournal = (folder: string) => existsSync(join(folder, 'meta', '_journal.json'))
+
+  const here = dirname(fileURLToPath(import.meta.url))
+
+  // 1. Source layout: client.ts lives inside server/db, next to migrations/.
+  const source = join(here, 'migrations')
+  if (hasJournal(source)) {
+    return source
+  }
+
+  // 2+3. Walk ancestors looking for the project's `server/db/migrations`
+  // (dev bundles) or the bundled `db/migrations` (production output).
+  for (let dir = here; ; dir = dirname(dir)) {
+    for (const candidate of [join(dir, 'server', 'db', 'migrations'), join(dir, 'db', 'migrations')]) {
+      if (hasJournal(candidate)) {
+        return candidate
+      }
+    }
+    if (dir === dirname(dir)) {
+      break
+    }
+  }
+
+  throw new Error('Drizzle migrations folder not found; expected server/db/migrations in the project or bundled next to the server entry')
+}
+
 function createDB(): DBHandle {
   const path = process.env.DATABASE_PATH
   if (!path) {
@@ -101,7 +138,7 @@ function createDB(): DBHandle {
   const sqlite = new SQLite(path)
   const db = drizzle(sqlite, { schema })
 
-  migrate(db, { migrationsFolder: fileURLToPath(new URL('./migrations/', import.meta.url)) })
+  migrate(db, { migrationsFolder: resolveMigrationsFolder() })
   sqlite.exec(FTS_DDL)
 
   return { db, sqlite }

@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { FeatureInventorySchema, FeatureScenariosSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema } from './schemas'
+import type { AddRepositorySchema, CreateProjectSchema, FeatureInventorySchema, FeatureScenariosSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -11,6 +11,14 @@ export type FeatureScenarioGroup = FeatureScenarios['groups'][number]
 
 export type SyncUpdate = z.infer<typeof SyncUpdateSchema>
 export type SyncFeatureUpdate = SyncUpdate['featureUpdates'][number]
+
+// --- Project management ---
+
+/** Project creation payload (POST /api/projects), shared by form and API. */
+export type CreateProjectInput = z.infer<typeof CreateProjectSchema>
+
+/** Payload for attaching another repository to a project. */
+export type AddRepositoryInput = z.infer<typeof AddRepositorySchema>
 
 // --- Domain enums (single source of truth for API + DB string literals) ---
 
@@ -28,6 +36,20 @@ export interface ProjectSummary {
   name: string
   description: string
   repositories: Array<{ owner: string, repo: string, branch: string }>
+}
+
+/**
+ * Project overview as served by GET /api/projects/:id: the project, its
+ * repositories and the last analysis status (null until the first analysis
+ * has been queued). Like ProjectSummary, it never carries the encrypted PAT.
+ */
+export interface ProjectDetail {
+  id: number
+  name: string
+  description: string
+  createdAt: string
+  repositories: Array<{ owner: string, repo: string, branch: string }>
+  lastAnalysis: { type: AnalysisType, status: AnalysisStatus, createdAt: string } | null
 }
 
 /** Feature tree node as served by GET /api/projects/:id/features. */
