@@ -1,4 +1,7 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import Database from 'better-sqlite3'
 import type { AnalysisProgress, FeatureDetail, FeatureNode } from '../../shared/types'
 
 /**
@@ -8,9 +11,25 @@ import type { AnalysisProgress, FeatureDetail, FeatureNode } from '../../shared/
  * the test-only admin route and sync. The sync must apply the AI revisions,
  * leave the manual scenario untouched, advance the head so a second sync is
  * an up-to-date no-op, and leave the stub state clean for the other specs.
+ * A second spec covers the route's duplicate guard at HTTP level.
  */
 const STUB_ADMIN = 'http://127.0.0.1:9876/_admin/state'
 const PROJECT_NAME = 'Sync Fixture'
+
+/**
+ * Opens the e2e server's SQLite database. `DATABASE_PATH=./data/test-e2e.db`
+ * resolves against the *server's* cwd, which `nuxt preview` sets to
+ * `.output/` — fall back to the project-root layout for other runners. The
+ * file must already exist (the server created it on boot); never create one.
+ */
+function openServerDb(): Database.Database {
+  for (const candidate of [path.resolve(process.cwd(), '.output', 'data', 'test-e2e.db'), path.resolve(process.cwd(), 'data', 'test-e2e.db')]) {
+    if (existsSync(candidate)) {
+      return new Database(candidate)
+    }
+  }
+  throw new Error('e2e server database not found (expected .output/data/test-e2e.db or data/test-e2e.db)')
+}
 
 async function login(page: Page): Promise<void> {
   await page.goto('/login')
@@ -33,10 +52,10 @@ async function setStubState(page: Page, state: 'initial' | 'after-auth-commit'):
 }
 
 /** Creates a project over the API and returns its id. */
-async function createProject(page: Page): Promise<number> {
-  await deleteProjectsByName(page, PROJECT_NAME)
+async function createProject(page: Page, name: string = PROJECT_NAME): Promise<number> {
+  await deleteProjectsByName(page, name)
   const createResponse = await page.request.post('/api/projects', {
-    data: { name: PROJECT_NAME, description: 'Exercises the sync pipeline end to end', owner: 'acme', repo: 'tasks' },
+    data: { name, description: 'Exercises the sync pipeline end to end', owner: 'acme', repo: 'tasks' },
   })
   expect(createResponse.status()).toBe(201)
   const project = (await createResponse.json()) as { id: number }
@@ -107,5 +126,46 @@ test('sync applies new commits, protects manual scenarios and no-ops when up to 
   } finally {
     await deleteProjectsByName(page, PROJECT_NAME)
     await setStubState(page, 'initial')
+  }
+})
+
+test('POST /sync answers 409 while a sync job is in flight and 404 for an unknown project', async ({ page }) => {
+  await login(page)
+  // Distinct project name: spec files run fully parallel, and both tests
+  // clean up by name — a shared name would delete the other test's project
+  // mid-run.
+  const projectId = await createProject(page, 'Sync Guard Fixture')
+  const seededJobIds: number[] = []
+
+  try {
+    // A mock-mode sync finishes in milliseconds, so a double-POST race is too
+    // flaky to pin the 409. Seed the server's own database with the in-flight
+    // state instead — a running sync job for this project — and hit the real
+    // route: startSync must map the jobs-table hit to SyncInProgressError → 409.
+    const db = openServerDb()
+    const result = db.prepare(
+      "INSERT INTO jobs (type, payloadJson, status, attempts, error, createdAt, finishedAt) VALUES ('sync', ?, 'running', 1, NULL, ?, NULL)",
+    ).run(JSON.stringify({ projectId }), new Date().toISOString())
+    seededJobIds.push(result.lastInsertRowid as number)
+    db.close()
+
+    const conflict = await page.request.post(`/api/projects/${projectId}/sync`)
+    expect(conflict.status()).toBe(409)
+
+    // No job seeded for a project that does not exist → plain 404.
+    const missing = await page.request.post('/api/projects/999999/sync')
+    expect(missing.status()).toBe(404)
+  } finally {
+    // The row is `running`, so the queue never claims it — but remove it
+    // anyway so nothing leaks into the other specs' queue.
+    if (seededJobIds.length > 0) {
+      const db = openServerDb()
+      const clear = db.prepare('DELETE FROM jobs WHERE id = ?')
+      for (const id of seededJobIds) {
+        clear.run(id)
+      }
+      db.close()
+    }
+    await deleteProjectsByName(page, 'Sync Guard Fixture')
   }
 })
