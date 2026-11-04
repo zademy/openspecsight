@@ -2,12 +2,12 @@
 import type { FetchError } from 'ofetch'
 
 /**
- * New-digest dialog. Opens with the last seven days prefilled (the same
- * defaults the server applies when both fields arrive empty); clearing a
- * field hands that end back to the server default. A server rejection
- * (empty range, digest already running) surfaces as a sentence in the
- * dialog, and a 202 hands control back to the list, which polls until the
- * digest appears.
+ * New-digest dialog. Opens with the shared default range prefilled: today
+ * plus the seven days before it, the same defaults the server applies when
+ * both fields arrive empty; clearing a field hands that end back to the
+ * server default. A server rejection (empty range, digest already running)
+ * surfaces as a sentence in the dialog, and a 202 hands control back to
+ * the list, which polls until the digest appears.
  */
 
 const props = defineProps<{ projectId: string }>()
@@ -51,7 +51,7 @@ async function onCreate() {
   <UModal
     v-model:open="open"
     title="New digest"
-    description="Pick the week to summarize — it defaults to the last seven days."
+    description="Pick the range to summarize. It defaults to today plus the seven days before it."
   >
     <UButton icon="i-lucide-plus" label="New digest" />
 

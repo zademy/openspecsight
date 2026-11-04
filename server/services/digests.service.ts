@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import { getDB } from '../db/client'
 import { digests, features, jobs, releases, scenarioRevisions } from '../db/schema'
 import { ContentBlocksSchema, DigestDraftSchema } from '../../shared/schemas'
+import { defaultDigestRange } from '../../shared/digest-range'
 import type { ContentBlocks, DigestDetail, DigestSummary, ReleaseCounts } from '../../shared/types'
 import { renderBlocksHtml, renderBlocksText } from '../utils/mailRenderer'
 import { enqueueJob } from './jobs.service'
@@ -97,20 +98,6 @@ export interface DigestDeps {
 
 function nowISO(): string {
   return new Date().toISOString()
-}
-
-/** UTC calendar day of an instant, the shape every range value uses. */
-function utcDate(date: Date): string {
-  return date.toISOString().slice(0, 10)
-}
-
-/**
- * The range "New digest" uses when the operator picks none: the last seven
- * days, as UTC dates (to = today, from = today − 7).
- */
-export function defaultDigestRange(now: Date = new Date()): { rangeFrom: string, rangeTo: string } {
-  const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  return { rangeFrom: utcDate(from), rangeTo: utcDate(now) }
 }
 
 /** Calendar day of a stored `committedAt`; ranges compare as plain strings. */
@@ -379,10 +366,12 @@ export async function deliverDigest(digestId: number, deps?: DeliverDigestDeps):
 }
 
 /**
- * One weekly run: last seven days, every project that shipped something.
- * `enabled` defaults to the runtime check the scheduled task performs
- * (DIGEST_WEEKLY_ENABLED === 'true'), so a deployment without the flag set
- * never sends anything. One project failing does not stop the others.
+ * One weekly run: the default window (today plus the seven days before it,
+ * eight days inclusive — see shared/digest-range), every project that
+ * shipped something. `enabled` defaults to the runtime check the scheduled
+ * task performs (DIGEST_WEEKLY_ENABLED === 'true'), so a deployment without
+ * the flag set never sends anything. One project failing does not stop the
+ * others.
  */
 export async function runWeeklyDigests(deps?: DigestDeps & { enabled?: boolean }): Promise<WeeklyDigestRun> {
   const enabled = deps?.enabled ?? process.env.DIGEST_WEEKLY_ENABLED === 'true'

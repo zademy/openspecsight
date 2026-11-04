@@ -1,8 +1,10 @@
+import { defaultDigestRange } from '#shared/digest-range'
 import { localDate } from './changes-format'
 
 /**
  * Formatting for the digests surfaces: the "Oct 28 – Nov 4, 2026" range
- * label and the last-seven-days defaults the New digest modal opens with.
+ * label and the default range the New digest modal opens with — today plus
+ * the seven days before it, mirroring the server default.
  * Dates format from the calendar parts of the stored ISO strings, never
  * the local clock, so both themes and timezones read the same digest.
  */
@@ -23,8 +25,7 @@ export function rangeLabel(rangeFrom: string, rangeTo: string): string {
   return `${MONTH_DAY_YEAR.format(from)} – ${MONTH_DAY_YEAR.format(to)}`
 }
 
-/** Last seven days as UTC dates — the modal's prefill, mirroring the server default. */
+/** The modal's prefill: the shared default range, unchanged. */
 export function suggestedDigestRange(now: Date = new Date()): { rangeFrom: string, rangeTo: string } {
-  const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  return { rangeFrom: from.toISOString().slice(0, 10), rangeTo: now.toISOString().slice(0, 10) }
+  return defaultDigestRange(now)
 }

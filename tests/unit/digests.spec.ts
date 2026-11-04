@@ -13,9 +13,9 @@ import {
   scenarioRevisions,
 } from '../../server/db/schema'
 import type { ContentBlocks } from '../../shared/types'
+import { defaultDigestRange } from '../../shared/digest-range'
 import {
   aggregateDigest,
-  defaultDigestRange,
   deliverDigest,
   DigestAlreadyEmailedError,
   DigestInProgressError,
@@ -132,7 +132,7 @@ afterAll(() => {
 })
 
 describe('digest defaults', () => {
-  test('the default range is the last seven days, as UTC dates', () => {
+  test('the default range is today plus the seven days before it, as UTC dates', () => {
     expect(defaultDigestRange(new Date('2026-11-04T15:30:00Z'))).toEqual({
       rangeFrom: '2026-10-28',
       rangeTo: '2026-11-04',

@@ -18,7 +18,7 @@ export function useDigests() {
     return $fetch<DigestDetail>(`/api/digests/${digestId}`, { headers })
   }
 
-  /** Both dates optional — the server defaults to the last seven days. */
+  /** Both dates optional — the server defaults to the shared window (today plus the seven days before it). */
   function create(projectId: number | string, input: CreateDigestInput = {}): Promise<{ jobId: number }> {
     return $fetch<{ jobId: number }>(`/api/projects/${projectId}/digests`, { method: 'POST', body: input })
   }

@@ -79,8 +79,8 @@ function openServerDb(): Database.Database {
 /**
  * Rewrites the project's release timestamps to yesterday and returns the
  * UTC date it stamped. The stub fixtures carry static committedAt values,
- * while the "New digest" modal defaults to the last seven days.
- * Backdating keeps that default range non-empty on any run date.
+ * while the "New digest" modal defaults to today plus the seven days
+ * before it. Backdating keeps that default range non-empty on any run date.
  */
 function backdateReleasesToYesterday(projectId: number): string {
   const stamped = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
