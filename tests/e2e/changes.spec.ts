@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import type { AnalysisProgress, FeatureNode } from '../../shared/types'
+import { login } from './helpers/login'
 
 /**
  * Changes end to end, continuing the Task 10 sync flow in the UI: analysis
@@ -14,20 +15,6 @@ import type { AnalysisProgress, FeatureNode } from '../../shared/types'
  */
 const STUB_ADMIN = 'http://127.0.0.1:9876/_admin/state'
 const PROJECT_NAME = 'Changes Fixture'
-
-async function login(page: Page): Promise<void> {
-  await page.goto('/login')
-  // Hydration re-mounts the form and resets the password input from state —
-  // wait until the client app owns the DOM, or an early fill gets wiped and
-  // sign-in submits an empty password.
-  await page.waitForFunction(() => {
-    const nuxtApp = (window as unknown as { useNuxtApp?: () => { isHydrating: boolean } }).useNuxtApp
-    return nuxtApp?.().isHydrating === false
-  })
-  await page.getByLabel('Password').fill('test-pass')
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL('http://localhost:3000/')
-}
 
 async function deleteProjectsByName(page: Page, name: string): Promise<void> {
   const response = await page.request.get('/api/projects')

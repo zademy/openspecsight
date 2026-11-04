@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Response } from '@playwright/test'
 import type { FeatureNode } from '../../shared/types'
 import { askFromOverview, deleteScriptedAnswer, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
+import { login } from './helpers/login'
 
 /**
  * The whole product in one pass, exactly as a fresh operator drives it: log
@@ -38,21 +39,6 @@ const EDITED_OUTCOME = 'the CLI keeps a session token that survives a server res
  */
 const SECRET_MARKERS = /(^|[^a-zA-Z])sk-|ghp_|test-secret|test-pass/
 
-async function login(page: Page): Promise<void> {
-  await page.goto('/login')
-  // Hydration re-mounts the form and resets the password input from state —
-  // wait until the client app owns the DOM, or an early fill gets wiped and
-  // sign-in submits an empty password.
-  await page.waitForFunction(() => {
-    const nuxtApp = (window as unknown as { useNuxtApp?: () => { isHydrating: boolean } }).useNuxtApp
-    return nuxtApp?.().isHydrating === false
-  })
-  await page.getByLabel('Password').fill('test-pass')
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL('http://localhost:3000/')
-}
-
-/** Deletes every project with the name and returns their ids (fixture cleanup follows them). */
 async function deleteProjectsByName(page: Page, name: string): Promise<number[]> {
   const response = await page.request.get('/api/projects')
   const projects = (await response.json()) as Array<{ id: number, name: string }>
