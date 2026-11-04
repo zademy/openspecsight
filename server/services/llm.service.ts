@@ -6,7 +6,7 @@ import { generateObject } from 'ai'
 import type { LanguageModel } from 'ai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { z } from 'zod'
+import { z } from 'zod'
 
 /**
  * Structured-output LLM client. `generate(name, schema, prompt, opts?)`
@@ -99,7 +99,7 @@ export function createLlmClient(deps: LlmClientDeps = {}): LlmClient {
 
   return {
     async generate<T>(name: string, schema: z.ZodType<T>, prompt: string): Promise<T> {
-      const raw = await runGenerate({ model, schema, prompt })
+      const raw = await runGenerate({ model, schema, prompt: `${prompt}\n\n${zodShapeHint(schema)}` })
       return schema.parse(raw)
     },
   }
@@ -183,6 +183,10 @@ function createDefaultModel(env: LlmEnv): LanguageModel {
       return createAnthropic({ baseURL, apiKey })(env.model)
     case 'openai':
     case 'openai-compatible':
+      // openai-compatible keeps the JSON schema in the prompt (no
+      // response_format json_schema), which is where weak-endpoint models
+      // actually read it; the shape hint + repair pass in generateWithSdk
+      // cover the rest.
       return createOpenAICompatible({ baseURL, apiKey, name: 'openspecsight' })(env.model)
     default:
       throw new Error(`Unsupported LLM_API_STYLE: ${env.apiStyle} (expected "anthropic", "openai", or "openai-compatible")`)
@@ -190,6 +194,79 @@ function createDefaultModel(env: LlmEnv): LanguageModel {
 }
 
 async function generateWithSdk(args: { model: LanguageModel, schema: z.ZodType, prompt: string }): Promise<unknown> {
-  const { object } = await generateObject({ model: args.model, schema: args.schema, prompt: args.prompt })
+  const { object } = await generateObject({
+    model: args.model,
+    schema: args.schema,
+    prompt: args.prompt,
+    experimental_repairText: repairStructuredText(args.schema),
+  })
   return object
+}
+
+/**
+ * Some OpenAI-compatible endpoints (MiniMax among them) accept but silently
+ * ignore `response_format: json_schema`, so the model never sees the schema
+ * and invents its own JSON shape. A compact, human-readable shape hint in the
+ * prompt plus a repair pass for the two classic failure modes (markdown
+ * fences, and a bare array where the schema expects a wrapper object) makes
+ * weak-endpoint models conform. Applied in real mode for every generate call.
+ */
+export function zodShapeHint(schema: z.ZodType): string {
+  const shape = compactShape(schema)
+  return `Respond ONLY with a single JSON ${shape}. No markdown, no code fences, no commentary.`
+}
+
+function compactShape(schema: z.ZodType): string {
+  if (schema instanceof z.ZodObject) {
+    const entries = Object.entries(schema.shape).map(([key, value]) => `${key}: ${compactShape(value as z.ZodType)}`)
+    return `object of this exact shape: {${entries.join(', ')}}`
+  }
+  if (schema instanceof z.ZodArray) {
+    return `array of ${compactShape(schema.element as z.ZodType)}`
+  }
+  if (schema instanceof z.ZodString) return 'string'
+  if (schema instanceof z.ZodNumber) return 'number'
+  if (schema instanceof z.ZodBoolean) return 'boolean'
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
+    return compactShape(schema.unwrap() as z.ZodType)
+  }
+  if (schema instanceof z.ZodEnum) {
+    return `one of ${schema.options.map(o => JSON.stringify(o)).join(' | ')}`
+  }
+  if (schema instanceof z.ZodUnion) {
+    return schema.options.map(o => compactShape(o as z.ZodType)).join(' | ')
+  }
+  return 'value'
+}
+
+/** Repair text for generateObject: strip fences, wrap bare arrays into the schema's single-array wrapper. */
+export function repairStructuredText(schema: z.ZodType) {
+  return async ({ text }: { text: string, error: unknown }): Promise<string | null> => {
+    let cleaned = text.trim()
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+    try {
+      const parsed: unknown = JSON.parse(cleaned)
+      if (Array.isArray(parsed)) {
+        const wrapper = singleArrayWrapperKey(schema)
+        if (wrapper) {
+          return JSON.stringify({ [wrapper]: parsed })
+        }
+      }
+    } catch {
+      // not JSON after cleaning; return the cleaned text and let the parser report
+    }
+    return cleaned
+  }
+}
+
+function singleArrayWrapperKey(schema: z.ZodType): string | null {
+  if (schema instanceof z.ZodObject) {
+    const entries = Object.entries(schema.shape)
+    const required = entries.filter(([, v]) => !(v instanceof z.ZodOptional))
+    const only = required[0]
+    if (required.length === 1 && only && only[1] instanceof z.ZodArray) {
+      return only[0]
+    }
+  }
+  return null
 }

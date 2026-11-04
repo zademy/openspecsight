@@ -243,3 +243,46 @@ describe('readLlmEnv()', () => {
     expect(readLlmEnv({}).mock).toBe(false)
   })
 })
+
+describe('weak-endpoint structured-output hardening', () => {
+  test('generate() appends the schema shape hint to every prompt', async () => {
+    process.env.LLM_MOCK = 'false'
+    process.env.LLM_API_STYLE = 'anthropic'
+    const createModel = vi.fn(() => offlineModel())
+    const generate = vi.fn(async () => inventoryPayload)
+    const client = createLlmClient({ createModel, generate })
+
+    await client.generate('feature-inventory', FeatureInventorySchema, 'inventory prompt')
+
+    const sentPrompt = generate.mock.calls[0]?.[0]?.prompt as string
+    expect(sentPrompt.startsWith('inventory prompt')).toBe(true)
+    expect(sentPrompt).toContain('Respond ONLY with a single JSON')
+    expect(sentPrompt).toContain('features: array of')
+    expect(sentPrompt).toContain('No markdown')
+  })
+
+  test('zodShapeHint describes nested objects, enums and optionals', async () => {
+    const { zodShapeHint } = await import('../../server/services/llm.service')
+    const { SyncUpdateSchema } = await import('../../shared/schemas')
+
+    const hint = zodShapeHint(SyncUpdateSchema)
+    expect(hint).toContain('title: string')
+    expect(hint).toContain('highlight: boolean')
+    expect(hint).toContain('one of "new" | "changed" | "gone" | "fixed"')
+    expect(hint).toContain('matchCode: string')
+  })
+
+  test('repairStructuredText strips code fences and wraps bare arrays into the single-array wrapper', async () => {
+    const { repairStructuredText } = await import('../../server/services/llm.service')
+    const repair = repairStructuredText(FeatureInventorySchema)
+
+    const fenced = await repair(new Error('x'), { text: '```json\n[{"name":"A","description":"d","files":["a.ts"]}]\n```' })
+    expect(JSON.parse(fenced)).toEqual({ features: [{ name: 'A', description: 'd', files: ['a.ts'] }] })
+
+    const bare = await repair(new Error('x'), { text: '[{"name":"B","description":"d","files":[]}]' })
+    expect(JSON.parse(bare)).toEqual({ features: [{ name: 'B', description: 'd', files: [] }] })
+
+    const alreadyFine = await repair(new Error('x'), { text: '{"features":[]}' })
+    expect(JSON.parse(alreadyFine)).toEqual({ features: [] })
+  })
+})
