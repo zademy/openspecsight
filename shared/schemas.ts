@@ -248,3 +248,30 @@ export const CreateDigestSchema = z.object({
 export const SendDigestSchema = z.object({
   force: z.boolean().default(false),
 })
+
+/** Payload of POST /api/projects/:id/voices: one named tone of writing. */
+export const CreateVoiceSchema = z.object({
+  name: z.string().trim().min(1, 'A voice needs a name').max(80),
+  description: z.string().trim().min(1, 'A voice needs a description').max(1000),
+})
+
+/**
+ * Payload of POST /api/projects/:id/release-notes. The scope is exactly one
+ * of a single release or a committed-at date range (both fields together);
+ * revisionIds optionally narrows the note to specific revisions of that
+ * scope and voiceId overrides the project's default voice.
+ */
+export const CreateReleaseNoteSchema = z.object({
+  releaseId: z.number().int().positive().optional(),
+  rangeFrom: z.string().date('rangeFrom must be a YYYY-MM-DD date').optional(),
+  rangeTo: z.string().date('rangeTo must be a YYYY-MM-DD date').optional(),
+  revisionIds: z.array(z.number().int().positive()).optional(),
+  voiceId: z.number().int().positive().optional(),
+}).refine(
+  (input) => (input.releaseId !== undefined) !== (input.rangeFrom !== undefined || input.rangeTo !== undefined)
+    && (input.releaseId !== undefined || (input.rangeFrom !== undefined && input.rangeTo !== undefined)),
+  { message: 'Give exactly one of releaseId or rangeFrom plus rangeTo' },
+).refine(
+  (input) => input.rangeFrom === undefined || input.rangeTo === undefined || input.rangeFrom <= input.rangeTo,
+  { message: 'rangeFrom must not be after rangeTo' },
+)

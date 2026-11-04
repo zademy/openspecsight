@@ -1,0 +1,12 @@
+{
+  "title": "Tighter sign-in checks",
+  "blocks": [
+    { "type": "heading", "text": "What changed" },
+    { "type": "paragraph", "text": "This release tightens how admin sign-in works. Sessions are now granted only after a second factor, they stay valid while you keep working instead of expiring mid-afternoon, and the old token endpoint is gone. Nothing to migrate: sign in again and continue as usual." },
+    { "type": "list", "items": [
+      "Second factor at sign-in — org admins confirm a code before any session cookie is set (Authentication).",
+      "Sessions that slide forward — an active session renews its cookie expiry on each request instead of dying at a fixed time (Authentication).",
+      "Legacy token endpoint removed — signed-in pages are the only way in; stale cookies redirect to the login page (Authentication)."
+    ] }
+  ]
+}

@@ -35,7 +35,7 @@ interface ScenarioSnapshot {
 }
 
 /** Parses a stored snapshot; null when absent or not matching the invariant. */
-function parseSnapshot(raw: string | null): ScenarioSnapshot | null {
+export function parseSnapshot(raw: string | null): ScenarioSnapshot | null {
   if (!raw) {
     return null
   }

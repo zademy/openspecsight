@@ -1,5 +1,6 @@
 import { runInitialAnalysis } from '../services/analysis.service'
 import { runDigest } from '../services/digests.service'
+import { runNoteDraft } from '../services/releaseNotes.service'
 import { runSync } from '../services/sync.service'
 import { recoverAfterRestart, registerJobHandler } from '../services/jobs.service'
 
@@ -34,6 +35,11 @@ export default defineNitroPlugin(() => {
       rangeFrom: String(payload.rangeFrom),
       rangeTo: String(payload.rangeTo),
     })
+  })
+  registerJobHandler('release-note', async (payload) => {
+    // The note id matters to direct callers only; the queue needs the job's
+    // completion.
+    await runNoteDraft(payload)
   })
   recoverAfterRestart(runTask)
 })

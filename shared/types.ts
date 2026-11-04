@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateDigestSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SendDigestSchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateDigestSchema, CreateProjectSchema, CreateReleaseNoteSchema, CreateScenarioSchema, CreateVoiceSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SendDigestSchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -380,4 +380,31 @@ export interface SendDigestResult {
 /** GET /api/mail-status — whether SMTP env is complete enough to send mail. */
 export interface MailStatus {
   configured: boolean
+}
+
+// --- Voices and release notes ---
+
+/** Payload of POST /api/projects/:id/voices. */
+export type CreateVoiceInput = z.infer<typeof CreateVoiceSchema>
+
+/** GET /api/projects/:id/voices — one configured voice. */
+export interface Voice {
+  id: number
+  name: string
+  description: string
+  isDefault: boolean
+}
+
+/** Payload of POST /api/projects/:id/release-notes. */
+export type CreateReleaseNoteInput = z.infer<typeof CreateReleaseNoteSchema>
+
+/** GET /api/projects/:id/release-notes — one drafted note, newest first. */
+export interface ReleaseNoteSummary {
+  id: number
+  title: string
+  slug: string
+  rangeFrom: string
+  rangeTo: string
+  published: boolean
+  createdAt: string
 }
