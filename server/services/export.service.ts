@@ -1,14 +1,15 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, desc, eq } from 'drizzle-orm'
 import { getDB } from '../db/client'
-import { connections, features, projects, scenarios } from '../db/schema'
+import { connections, features, projects, releases, scenarios } from '../db/schema'
 import { featureSlug } from './analysis/paths'
 import { humanizeConnectionType } from '../../shared/connection-labels'
 
 /**
  * The whole product spec as one portable Markdown document: the feature
  * tree with its scenario groups — the same content the spec UI renders,
- * scenarios on the row they live on — plus a connections appendix. Served
- * by /api/projects/:id/export/markdown as an attachment download.
+ * scenarios on the row they live on — plus appendices for the feature
+ * connections and the release history. Served by
+ * /api/projects/:id/export/markdown as an attachment download.
  */
 
 interface ExportGroup {
@@ -70,6 +71,13 @@ export async function exportProjectMarkdown(projectId: number): Promise<{ markdo
 
   const connectionRows = db.select().from(connections).where(eq(connections.projectId, projectId)).all()
 
+  // The release history closes the document: newest first, one line per
+  // release, so a shared export says what shipped and when.
+  const releaseRows = db.select({ title: releases.title, committedAt: releases.committedAt })
+    .from(releases)
+    .where(eq(releases.projectId, projectId))
+    .orderBy(desc(releases.committedAt), desc(releases.id)).all()
+
   // Context groups in first-seen order of the sortOrder walk — the same
   // grouping getFeatureDetail serves the spec UI.
   const groupsByFeature = new Map<number, ExportGroup[]>()
@@ -121,6 +129,12 @@ export async function exportProjectMarkdown(projectId: number): Promise<{ markdo
   if (connectionLines.length > 0) {
     lines.push('## How features connect', '')
     lines.push(...connectionLines)
+  }
+  if (releaseRows.length > 0) {
+    lines.push('## Releases', '')
+    for (const release of releaseRows) {
+      lines.push(`- ${release.title} — ${release.committedAt.slice(0, 10)}`)
+    }
   }
 
   return {

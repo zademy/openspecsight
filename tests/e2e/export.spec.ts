@@ -77,6 +77,8 @@ test.describe('markdown export', () => {
       await download.saveAs(target)
       const markdown = await readFile(target, 'utf8')
       expect(markdown).toContain('# Export Fixture')
+      // This project has no releases, so no release history renders.
+      expect(markdown).not.toContain('## Releases')
       const missing = codes.filter((code) => !markdown.includes(`\`${code}\``))
       expect(missing).toEqual([])
     } finally {

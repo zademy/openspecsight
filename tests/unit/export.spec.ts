@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { analyses, connections, features, projects, repositories, scenarios } from '../../server/db/schema'
+import { analyses, connections, features, projects, releases, repositories, scenarios } from '../../server/db/schema'
 import { runInitialAnalysis } from '../../server/services/analysis.service'
 import { exportProjectMarkdown } from '../../server/services/export.service'
 import { createManualScenario } from '../../server/services/spec.service'
@@ -72,8 +72,10 @@ describe('exportProjectMarkdown', () => {
     const missingCodes = scenarioRows.map((row) => row.code).filter((code) => !markdown.includes(`\`${code}\``))
     expect(missingCodes).toEqual([])
 
-    // The appendix lists all four stored pairs, humanized, ordered by
-    // from-name (ties by to-name, then stored type).
+    // No releases exist in this fixture world, so the connections
+    // appendix closes the document ('## Releases' renders only when the
+    // project has any).
+    expect(markdown).not.toContain('## Releases')
     const appendix = markdown.slice(markdown.indexOf('## How features connect'))
     const connectionLines = appendix.split('\n').filter((line) => line.startsWith('- '))
     expect(connectionLines).toEqual([
@@ -82,6 +84,44 @@ describe('exportProjectMarkdown', () => {
       '- Login — Leads to → Task list',
       '- Tasks — Depends on → Authentication',
     ])
+  })
+
+  test('the release history appendix lists every release, newest first', async () => {
+    const db = getDB()
+    db.insert(releases).values([
+      {
+        projectId,
+        repositoryId: db.select({ id: repositories.id }).from(repositories).get()!.id,
+        sha: 'aaa111',
+        title: 'Tighter sign-in checks',
+        category: 'feature',
+        highlight: 1,
+        summary: 'Admin sign-in wants a second factor.',
+        authorsJson: '["acme"]',
+        message: 'Tighter sign-in checks',
+        committedAt: '2026-11-02T10:00:00.000Z',
+      },
+      {
+        projectId,
+        repositoryId: db.select({ id: repositories.id }).from(repositories).get()!.id,
+        sha: 'bbb222',
+        title: 'Add tasks module',
+        category: 'feature',
+        highlight: 0,
+        summary: 'The task list reached its first stable shape.',
+        authorsJson: '["acme"]',
+        message: 'Add tasks module',
+        committedAt: '2026-11-03T09:00:00.000Z',
+      },
+    ]).run()
+
+    const { markdown } = await exportProjectMarkdown(projectId)
+
+    const releasesSection = markdown.slice(markdown.indexOf('## Releases'))
+    expect(releasesSection).toContain('- Tighter sign-in checks — 2026-11-02')
+    expect(releasesSection).toContain('- Add tasks module — 2026-11-03')
+    // Newest first, so the latest release reads first.
+    expect(releasesSection.indexOf('Add tasks module')).toBeLessThan(releasesSection.indexOf('Tighter sign-in checks'))
   })
 
   test('headings nest: project H1, top-level features H2, children H3, in spec order', async () => {
