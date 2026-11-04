@@ -251,6 +251,30 @@ test.describe('release notes', () => {
       await expect(page.getByRole('textbox', { name: 'Paragraph 1' })).toHaveValue('Manual words win after the rewrite.')
       await expect(page.getByRole('textbox', { name: 'List 2' })).toHaveValue('First new item\nSecond new item\nThird new item')
 
+
+      // An empty block stays local (never stored), so enhancing a block
+      // that sits AFTER it must target the stored array's index — the
+      // local position would point one past the end (400) or at the
+      // wrong block.
+      await page.getByRole('button', { name: 'Add block' }).click()
+      await page.getByRole('menuitem', { name: 'Paragraph' }).click()
+      await page.getByRole('button', { name: 'Add block' }).click()
+      await page.getByRole('menuitem', { name: 'Paragraph' }).click()
+      await page.getByRole('textbox', { name: 'Paragraph 5' }).fill('This paragraph sits after an empty one.')
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+      const lateArticle = page.locator('article').filter({ has: page.getByRole('textbox', { name: 'Paragraph 5' }) })
+      await lateArticle.getByRole('button', { name: 'Enhance' }).click()
+      await lateArticle.getByRole('button', { name: 'Rewrite paragraph' }).click()
+      await expect(page.getByRole('textbox', { name: 'Paragraph 5' })).toHaveValue(
+        /^Admin sign-in now has a second gate:/,
+        { timeout: 15_000 },
+      )
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+      await page.reload()
+      // The empty block never persisted, so the rewrite lands at position 4.
+      await expect(page.getByRole('textbox', { name: 'Paragraph 4' })).toHaveValue(/^Admin sign-in now has a second gate:/)
+      await expect(page.getByRole('textbox', { name: 'Paragraph 5' })).toHaveCount(0)
+
       // The public page (once published) renders the edited content.
       await page.getByRole('button', { name: 'Publish' }).click()
       await expect(page.getByText('Published', { exact: true })).toBeVisible()

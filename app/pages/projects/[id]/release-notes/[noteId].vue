@@ -132,13 +132,6 @@ async function doSave(): Promise<void> {
   }
 }
 
-/** Server rows only ever hold renderable blocks; empty drafts stay local. */
-function hasContent(block: ContentBlock): boolean {
-  return block.type === 'list'
-    ? block.items.some(item => item.trim().length > 0)
-    : typeof block.text === 'string' && block.text.trim().length > 0
-}
-
 // Leaving the page saves what the debounce has not sent yet.
 onBeforeRouteLeave(() => {
   void flushSave()
@@ -210,7 +203,8 @@ function toggleEnhancePanel(index: number): void {
 
 /**
  * Flushes the pending debounce first, so the rewrite lands on the stored
- * state; the answer replaces that one block and autosaves like any edit.
+ * state, then maps the block to its index in the stored (saveable)
+ * array — the answer replaces that one block and autosaves like any edit.
  */
 async function onEnhance(index: number): Promise<void> {
   if (enhancingIndex.value !== null) {
@@ -220,8 +214,19 @@ async function onEnhance(index: number): Promise<void> {
   actionNote.value = ''
   try {
     await flushSave()
+    if (saveState.value === 'failed') {
+      actionNote.value = 'The edits are not saved yet — try the rewrite again.'
+      return
+    }
+    // The server stores the saveable array only, so send the block's
+    // index THERE and apply the answer back at the local position.
+    const serverIndex = serverBlockIndex(blocks.value, index)
+    if (serverIndex === -1) {
+      actionNote.value = 'This block is empty — write something first, then enhance.'
+      return
+    }
     const instruction = enhanceInstruction.value.trim()
-    const { block } = await enhance(noteId, index, instruction || undefined)
+    const { block } = await enhance(noteId, serverIndex, instruction || undefined)
     blocks.value = blocks.value.map((entry, entryIndex) => (entryIndex === index ? block : entry))
     enhancePanel.value = null
     enhanceInstruction.value = ''
@@ -382,7 +387,7 @@ async function copyPublicLink() {
               color="neutral"
               variant="ghost"
               size="sm"
-              :disabled="index === 0"
+              :disabled="index === 0 || enhancingIndex !== null"
               :aria-label="`Move block ${index + 1} up`"
               @click="moveBlock(index, -1)"
             />
@@ -391,7 +396,7 @@ async function copyPublicLink() {
               color="neutral"
               variant="ghost"
               size="sm"
-              :disabled="index === blocks.length - 1"
+              :disabled="index === blocks.length - 1 || enhancingIndex !== null"
               :aria-label="`Move block ${index + 1} down`"
               @click="moveBlock(index, 1)"
             />
@@ -400,6 +405,7 @@ async function copyPublicLink() {
               color="neutral"
               variant="ghost"
               size="sm"
+              :disabled="enhancingIndex !== null"
               :aria-label="`Delete block ${index + 1}`"
               @click="deleteBlock(index)"
             />
@@ -410,6 +416,7 @@ async function copyPublicLink() {
               color="neutral"
               variant="ghost"
               size="sm"
+              :disabled="enhancingIndex !== null"
               :loading="enhancingIndex === index"
               @click="toggleEnhancePanel(index)"
             />
