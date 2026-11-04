@@ -25,7 +25,22 @@ const summary = computed(() => featureCount.value === 0
 
 <template>
   <div class="space-y-6">
-    <UPageHeader title="Product spec" :description="summary" />
+    <UPageHeader title="Product spec" :description="summary">
+      <template #links>
+        <UTooltip text="Export Markdown">
+          <!-- Plain anchor navigation: the session cookie rides along and
+               the attachment headers hand the browser a real download. -->
+          <UButton
+            icon="i-lucide-download"
+            color="neutral"
+            variant="ghost"
+            aria-label="Export Markdown"
+            :to="`/api/projects/${projectId}/export/markdown`"
+            external
+          />
+        </UTooltip>
+      </template>
+    </UPageHeader>
 
     <FeatureTree
       v-if="featureCount > 0"
