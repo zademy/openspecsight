@@ -1,0 +1,45 @@
+{
+  "featureName": "Authentication",
+  "groups": [
+    {
+      "context": "user on the login page",
+      "scenarios": [
+        {
+          "action": "submit the login form with a registered email and the correct password",
+          "outcome": "the user lands on the tasks page and the session cookie is set",
+          "category": "happy"
+        },
+        {
+          "action": "submit the login form with an unregistered email",
+          "outcome": "the form shows 'Invalid email or password' and no cookie is set",
+          "category": "error"
+        },
+        {
+          "action": "submit the login form with the wrong password",
+          "outcome": "the form shows 'Invalid email or password' and no cookie is set",
+          "category": "error"
+        }
+      ]
+    },
+    {
+      "context": "user with an active session",
+      "scenarios": [
+        {
+          "action": "log out from any page",
+          "outcome": "the session cookie is cleared and the user is redirected to the login page",
+          "category": "happy"
+        },
+        {
+          "action": "open a protected page with an expired session cookie",
+          "outcome": "the request is redirected to the login page with a return URL",
+          "category": "edge"
+        },
+        {
+          "action": "open a protected page with a cookie signed by a foreign key",
+          "outcome": "the cookie fails the signature check and the user is redirected to the login page",
+          "category": "error"
+        }
+      ]
+    }
+  ]
+}

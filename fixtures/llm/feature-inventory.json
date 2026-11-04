@@ -1,0 +1,50 @@
+{
+  "features": [
+    {
+      "name": "Authentication",
+      "description": "Email and password login with signed session cookies and logout.",
+      "files": [
+        "server/api/auth/login.post.ts",
+        "server/api/auth/logout.post.ts",
+        "server/utils/session.ts",
+        "app/pages/login.vue",
+        "app/middleware/auth.ts"
+      ],
+      "children": [
+        {
+          "name": "Login",
+          "description": "Validates credentials and starts a signed session cookie.",
+          "files": ["server/api/auth/login.post.ts", "app/pages/login.vue"]
+        },
+        {
+          "name": "Logout",
+          "description": "Clears the session cookie and redirects to the login page.",
+          "files": ["server/api/auth/logout.post.ts"]
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "description": "Create, complete, and filter personal tasks with due dates.",
+      "files": [
+        "server/api/tasks/index.get.ts",
+        "server/api/tasks/index.post.ts",
+        "server/api/tasks/[id].patch.ts",
+        "app/pages/tasks/index.vue",
+        "app/components/tasks/TaskItem.vue"
+      ],
+      "children": [
+        {
+          "name": "Task list",
+          "description": "Lists the signed-in user's tasks grouped by due date.",
+          "files": ["server/api/tasks/index.get.ts", "app/pages/tasks/index.vue"]
+        },
+        {
+          "name": "Task lifecycle",
+          "description": "Create, complete, and reopen tasks with optimistic UI updates.",
+          "files": ["server/api/tasks/index.post.ts", "server/api/tasks/[id].patch.ts"]
+        }
+      ]
+    }
+  ]
+}

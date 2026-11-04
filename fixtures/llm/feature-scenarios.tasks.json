@@ -1,0 +1,45 @@
+{
+  "featureName": "Tasks",
+  "groups": [
+    {
+      "context": "user creating and completing tasks",
+      "scenarios": [
+        {
+          "action": "create a task with a title and a due date",
+          "outcome": "the task appears in the list under its due date group",
+          "category": "happy"
+        },
+        {
+          "action": "check the checkbox of an open task",
+          "outcome": "the task moves to Completed with a struck-through title",
+          "category": "happy"
+        },
+        {
+          "action": "uncheck a completed task",
+          "outcome": "the task returns to Open with its original due date",
+          "category": "happy"
+        }
+      ]
+    },
+    {
+      "context": "user filtering the task list",
+      "scenarios": [
+        {
+          "action": "filter the list to tasks due today when none are due",
+          "outcome": "the list shows 'No tasks due today' instead of an empty grid",
+          "category": "edge"
+        },
+        {
+          "action": "create a task with an empty title",
+          "outcome": "the create button stays disabled and no request is sent",
+          "category": "error"
+        },
+        {
+          "action": "complete a task another session already deleted",
+          "outcome": "the stale row is removed from the list and a 'Task no longer exists' note is shown",
+          "category": "error"
+        }
+      ]
+    }
+  ]
+}

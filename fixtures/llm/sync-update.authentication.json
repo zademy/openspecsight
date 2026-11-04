@@ -1,0 +1,48 @@
+{
+  "title": "Session and login hardening",
+  "category": "security",
+  "highlight": true,
+  "summary": "Login now throttles repeated failures, sessions slide their expiry on activity, and the legacy token endpoint is gone.",
+  "featureUpdates": [
+    {
+      "featureName": "Authentication",
+      "changedFiles": [
+        "server/api/auth/login.post.ts",
+        "server/utils/session.ts",
+        "server/api/auth/token.post.ts"
+      ],
+      "scenarios": [
+        {
+          "kind": "new",
+          "context": "user on the login page",
+          "action": "fail login five times in a row from the same IP",
+          "outcome": "further attempts get 429 with a Retry-After hint for 15 minutes",
+          "category": "edge"
+        },
+        {
+          "kind": "changed",
+          "matchCode": "AUTH-H-1",
+          "context": "user on the login page",
+          "action": "submit the login form with a registered email and the correct password",
+          "outcome": "the user lands on the tasks page, the session cookie is set, and its expiry slides forward on each authenticated request",
+          "category": "happy"
+        },
+        {
+          "kind": "fixed",
+          "matchCode": "AUTH-H-2",
+          "context": "user with an active session",
+          "action": "open a protected page with a valid cookie from a logged-out device",
+          "outcome": "the session is rejected server-side and the user is redirected to the login page",
+          "category": "error"
+        },
+        {
+          "kind": "gone",
+          "context": "legacy API clients",
+          "action": "call the removed /api/auth/token endpoint with a legacy token",
+          "outcome": "the API returns 404 and the docs point to session cookies",
+          "category": "error"
+        }
+      ]
+    }
+  ]
+}
