@@ -131,6 +131,21 @@ describe('searchScenarios()', () => {
     expect(await searchScenarios(seeded.db, seeded.projectId, 'zzqxjv')).toEqual([])
   })
 
+  test('falls back to OR matching so natural questions still hit', async () => {
+    const seeded = seedLoginScenarios('Widget Platform')
+
+    const hits = await searchScenarios(seeded.db, seeded.projectId, 'What happens when the login fails?')
+
+    expect(hits[0]!.scenarioId).toBe(seeded.strongLoginScenarioId)
+    expect(hits.some((hit) => hit.scenarioId === seeded.weakLoginScenarioId)).toBe(true)
+  })
+
+  test('keeps multi-token garbage empty through the fallback', async () => {
+    const seeded = seedLoginScenarios('Widget Platform')
+
+    expect(await searchScenarios(seeded.db, seeded.projectId, 'flux capacitor wiring')).toEqual([])
+  })
+
   test('never throws on FTS operator soup', async () => {
     const seeded = seedLoginScenarios('Widget Platform')
 

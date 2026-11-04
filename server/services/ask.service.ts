@@ -80,8 +80,8 @@ function buildAskPrompt(question: string, hits: ScenarioSearchHit[]): string {
  *  2. Walk the answer's [n] markers left to right: markers with no surviving
  *     citation are stripped; surviving ones are re-indexed 1..N in first-
  *     appearance order and the markers remapped to the new numbers.
- *  3. Citations no marker references keep their prompt order, after the
- *     cited ones, so every survivor stays addressable.
+ *  3. Citations no marker references come last, sorted by prompt index,
+ *     so survivor order stays prompt order whatever order they arrived in.
  */
 function groundAnswer(raw: AskAnswer, hits: ScenarioSearchHit[]): { answer: string, citations: AskCitation[] } {
   const hitByScenarioId = new Map(hits.map((hit) => [hit.scenarioId, hit]))
@@ -121,12 +121,13 @@ function groundAnswer(raw: AskAnswer, hits: ScenarioSearchHit[]): { answer: stri
     return `[${displayIndex}]`
   })
 
-  for (const [original, citation] of byIndex) {
-    if (!displayIndexByOriginal.has(original)) {
-      displayIndexByOriginal.set(original, citations.length + 1)
-      citation.index = citations.length + 1
-      citations.push(citation)
-    }
+  const unreferenced = [...byIndex]
+    .filter(([original]) => !displayIndexByOriginal.has(original))
+    .sort(([a], [b]) => a - b)
+  for (const [original, citation] of unreferenced) {
+    displayIndexByOriginal.set(original, citations.length + 1)
+    citation.index = citations.length + 1
+    citations.push(citation)
   }
 
   // Only touch whitespace where a marker was actually removed, so clean

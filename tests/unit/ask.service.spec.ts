@@ -122,11 +122,36 @@ describe('ask', () => {
       'ask-answer': { covered: true, answer: 'fabricated', citations: [] },
     })
 
-    const result = await ask(projectId, 'invoice refunds', { llm })
+    const result = await ask(projectId, 'flux capacitor wiring', { llm })
 
     expect(result).toEqual({ answer: NO_COVERAGE_ANSWER, refused: true, citations: [] })
     expect(vi.mocked(searchScenarios).mock.calls).toHaveLength(1)
     expect(llm.generateCalls).toEqual([])
+  })
+
+  test('answers a natural question through the or fallback instead of refusing', async () => {
+    const projectId = await seedProject()
+    // Six tokens AND to zero rows on this corpus; the fallback must still
+    // surface the wrong-password scenario or ask() would refuse the question.
+    const hits = await searchScenarios(getDB(), projectId, 'What happens with a wrong password?')
+    expect(hits[0]!.action).toContain('wrong password')
+
+    const llm = fakeLlm({
+      'ask-answer': {
+        covered: true,
+        answer: 'A wrong password gets Invalid email or password and no cookie is set [1].',
+        citations: [
+          { index: 1, scenarioId: hits[0]!.scenarioId, quote: 'submit the login form with the wrong password' },
+        ],
+      },
+    })
+
+    const result = await ask(projectId, 'What happens with a wrong password?', { llm })
+
+    expect(result.refused).toBe(false)
+    expect(result.citations).toHaveLength(1)
+    expect(result.citations[0]!.scenarioId).toBe(hits[0]!.scenarioId)
+    expect(llm.generateCalls).toHaveLength(1)
   })
 
   test('refuses an empty question without retrieval or llm calls', async () => {
@@ -207,27 +232,29 @@ describe('ask', () => {
     ])
   })
 
-  test('keeps citations no marker references, after the cited ones, in prompt order', async () => {
+  test('keeps citations no marker references, after the cited ones, sorted by prompt index', async () => {
     const projectId = await seedProject()
     const hits = await searchScenarios(getDB(), projectId, 'login form')
     expect(hits.length).toBeGreaterThan(2)
     const llm = fakeLlm({
       'ask-answer': {
         covered: true,
-        answer: 'The second scenario matters here [2].',
+        answer: 'The last scenario matters here [3].',
         citations: [
-          { index: 2, scenarioId: hits[1]!.scenarioId, quote: 'cited quote' },
-          { index: 3, scenarioId: hits[2]!.scenarioId, quote: 'unreferenced quote' },
+          { index: 3, scenarioId: hits[2]!.scenarioId, quote: 'cited quote' },
+          { index: 2, scenarioId: hits[1]!.scenarioId, quote: 'out-of-order quote' },
+          { index: 1, scenarioId: hits[0]!.scenarioId, quote: 'unreferenced quote' },
         ],
       },
     })
 
     const result = await ask(projectId, 'login form', { llm })
 
-    expect(result.answer).toBe('The second scenario matters here [1].')
+    expect(result.answer).toBe('The last scenario matters here [1].')
     expect(result.citations).toEqual([
-      { index: 1, scenarioId: hits[1]!.scenarioId, code: hits[1]!.code, featureId: hits[1]!.featureId, featureName: hits[1]!.featureName, quote: 'cited quote' },
-      { index: 2, scenarioId: hits[2]!.scenarioId, code: hits[2]!.code, featureId: hits[2]!.featureId, featureName: hits[2]!.featureName, quote: 'unreferenced quote' },
+      { index: 1, scenarioId: hits[2]!.scenarioId, code: hits[2]!.code, featureId: hits[2]!.featureId, featureName: hits[2]!.featureName, quote: 'cited quote' },
+      { index: 2, scenarioId: hits[0]!.scenarioId, code: hits[0]!.code, featureId: hits[0]!.featureId, featureName: hits[0]!.featureName, quote: 'unreferenced quote' },
+      { index: 3, scenarioId: hits[1]!.scenarioId, code: hits[1]!.code, featureId: hits[1]!.featureId, featureName: hits[1]!.featureName, quote: 'out-of-order quote' },
     ])
   })
 
