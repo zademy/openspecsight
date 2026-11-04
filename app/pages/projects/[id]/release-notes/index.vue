@@ -3,7 +3,8 @@
  * Project release notes: the stored drafts, newest first, with the
  * "New release note" entry point. Starting one answers 202 immediately —
  * the LLM drafting runs in a job — so this page polls its own list until
- * the note appears, and says so inline while it waits.
+ * the note appears, and says so inline while it waits. The voices the
+ * drafts can be written in are managed at the bottom of the page.
  */
 
 const route = useRoute()
@@ -120,5 +121,6 @@ function onNoteStarted(): void {
       title="No release notes yet"
       description="A release note drafts what shipped for the people using the product, and publishes to a shareable page. Create the first one with New release note."
     />
+    <VoicesManager :project-id="projectId" />
   </div>
 </template>

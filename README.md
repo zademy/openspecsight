@@ -139,8 +139,9 @@ do not read commits. Draft one from the **Release notes** section: pick a
 release (or a date range) and a voice, and the LLM drafts a title and
 blocks. A voice is a standing instruction for how this project's notes
 should sound; the default voice needs no setup, and projects can add their
-own. If a voice is deleted, existing notes keep the default voice instead
-of breaking.
+own under **Voices** on the same page (up to three; the first one becomes
+the default). If a voice is deleted, existing notes keep the default voice
+instead of breaking.
 
 The draft opens in a block editor: edit the title and every block, add,
 move, or delete blocks, and rewrite one paragraph with **Enhance**. Edits

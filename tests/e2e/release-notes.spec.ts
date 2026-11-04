@@ -292,4 +292,38 @@ test.describe('release notes', () => {
       await page.request.delete(`/api/projects/${projectId}`)
     }
   })
+
+  test('voices: create with an automatic default, move the default, delete', async ({ page }) => {
+    await login(page)
+    const projectId = await createProject(page, 'Voices Manager Fixture', 'notes')
+    try {
+      await page.goto(`/projects/${projectId}/release-notes`)
+
+      // The first voice becomes the default without an extra step.
+      await page.getByRole('textbox', { name: 'Name' }).fill('Support notes')
+      await page.getByRole('textbox', { name: 'Description' }).fill('Warm and plain-spoken.')
+      await page.getByRole('button', { name: 'Add voice' }).click()
+      const supportRow = page.locator('li', { hasText: 'Support notes' })
+      await expect(supportRow).toBeVisible()
+      await expect(supportRow.getByText('Default', { exact: true })).toBeVisible()
+
+      // A second voice starts unmarked; moving the default is one click.
+      await page.getByRole('textbox', { name: 'Name' }).fill('Release highlights')
+      await page.getByRole('textbox', { name: 'Description' }).fill('Terse and factual.')
+      await page.getByRole('button', { name: 'Add voice' }).click()
+      const highlightsRow = page.locator('li', { hasText: 'Release highlights' })
+      await expect(highlightsRow).toBeVisible()
+      await highlightsRow.getByRole('button', { name: 'Set as default' }).click()
+      await expect(highlightsRow.getByText('Default', { exact: true })).toBeVisible()
+      await expect(supportRow.getByRole('button', { name: 'Set as default' })).toBeVisible()
+
+      // Deleting is confirm-free and quiet: notes using the voice fall
+      // back to the default voice, so nothing can break.
+      await highlightsRow.getByRole('button', { name: /Delete Release highlights/ }).click()
+      await expect(page.getByText('Release highlights')).toHaveCount(0)
+      await expect(supportRow).toBeVisible()
+    } finally {
+      await page.request.delete(`/api/projects/${projectId}`)
+    }
+  })
 })
