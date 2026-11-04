@@ -164,9 +164,11 @@ test.describe('product map on a phone', () => {
       const canvas = page.locator('.vue-flow')
       await expect(canvas).toBeVisible()
 
-      // fit-view-on-init frames the whole graph, so a node sits in the
-      // small viewport without scrolling — the canvas is the page's
-      // working surface at 360px.
+      // fit-view-on-init frames the whole graph inside the canvas — the
+      // canvas is the page's working surface at 360px. The section rail
+      // grew with Ask (Task 8), so the canvas sits below the phone fold;
+      // scroll to it before judging what fit-view framed.
+      await canvas.scrollIntoViewIfNeeded()
       await expect(page.locator('.vue-flow__node').first()).toBeInViewport()
 
       // The corner control stack is an sm-and-up affordance; on a phone

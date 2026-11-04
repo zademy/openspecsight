@@ -3,8 +3,8 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 /**
  * Project shell: the section rail plus the active section page (overview,
- * product spec, product map, changes). Real sections link; ask/digests stay
- * muted "coming soon" entries until their tasks land.
+ * product spec, product map, ask, changes). Real sections link; digests
+ * stays a muted "coming soon" entry until its task lands.
  */
 
 const route = useRoute()
@@ -21,11 +21,12 @@ const items = computed<NavigationMenuItem[]>(() => [
   { label: 'Overview', to: `/projects/${projectId}`, active: route.path === `/projects/${projectId}` },
   { label: 'Product spec', to: `/projects/${projectId}/spec`, active: route.path.startsWith(`/projects/${projectId}/spec`) },
   { label: 'Product map', to: `/projects/${projectId}/map`, active: route.path.startsWith(`/projects/${projectId}/map`) },
+  { label: 'Ask', to: `/projects/${projectId}/ask`, active: route.path.startsWith(`/projects/${projectId}/ask`) },
   { label: 'Changes', to: `/projects/${projectId}/changes`, active: route.path.startsWith(`/projects/${projectId}/changes`) },
 ])
 
 /** Sections that exist in the product vision but not in this build yet. */
-const COMING_SOON = ['Ask', 'Digests']
+const COMING_SOON = ['Digests']
 </script>
 
 <template>

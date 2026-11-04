@@ -4,9 +4,11 @@ import {
   analyses,
   annotations,
   connections,
+  conversations,
   featureFiles,
   features,
   flows,
+  messages,
   projects,
   repositories,
   releases,
@@ -219,6 +221,15 @@ export function deleteProject(id: number): boolean {
       tx.delete(flows).where(inArray(flows.featureId, featureIds)).run()
       tx.delete(features).where(eq(features.projectId, id)).run()
     }
+    // Conversations arrived in Plan 2 carrying real data, so the cascade
+    // clears their messages before the rows themselves (messages reference
+    // conversations, not the project).
+    const conversationIds = tx.select({ id: conversations.id }).from(conversations)
+      .where(eq(conversations.projectId, id)).all().map((row) => row.id)
+    if (conversationIds.length > 0) {
+      tx.delete(messages).where(inArray(messages.conversationId, conversationIds)).run()
+    }
+    tx.delete(conversations).where(eq(conversations.projectId, id)).run()
     tx.delete(repositories).where(eq(repositories.projectId, id)).run()
     tx.delete(projects).where(eq(projects.id, id)).run()
 

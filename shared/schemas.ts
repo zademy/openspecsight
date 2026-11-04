@@ -183,3 +183,14 @@ export const UpdateScenarioSchema = CreateScenarioSchema.partial().refine(
 export const CreateAnnotationSchema = z.object({
   body: z.string().trim().min(1, 'A note needs some text').max(2000),
 })
+
+/**
+ * Payload of POST /api/projects/:id/ask: one question, optionally into an
+ * existing conversation. An empty question is rejected here — the ask
+ * service's empty-question refusal exists for direct service calls, while
+ * the API never stores a blank message.
+ */
+export const AskQuestionSchema = z.object({
+  question: z.string().trim().min(1, 'A question needs some text').max(2000),
+  conversationId: z.number().int().positive().optional(),
+})

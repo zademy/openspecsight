@@ -93,7 +93,7 @@ test('release timeline, feature filter and the View-in-spec deep link', async ({
     expect(((await manualDays.json()) as Array<{ releases: unknown[] }>).flatMap((day) => day.releases)).toEqual([])
     expect((await page.request.get('/api/releases/999999')).status()).toBe(404)
 
-    // --- Overview: day heading, release card, honest ask bar ---
+    // --- Overview: day heading, release card, the live ask bar ---
     await page.goto(`/projects/${projectId}`)
 
     const dayHeading = page.getByRole('heading', { name: 'Nov 2 · Monday' })
@@ -105,15 +105,11 @@ test('release timeline, feature filter and the View-in-spec deep link', async ({
     await expect(card.getByText('GH', { exact: true })).toBeVisible()
     await expect(card.getByText('1 new · 1 changed · 1 gone · 1 fixed')).toBeVisible()
 
-    const askInput = page.getByPlaceholder('Ask anything (coming next)')
-    await expect(askInput).toBeDisabled()
-    // The input swallows pointer events (pointer-events: none) so the tooltip
-    // trigger — its wrapper — is what receives the hover. The tooltip renders
-    // the text twice (a11y copy + visible bubble); assert the visible one.
-    await askInput.locator('..').hover()
-    await expect(
-      page.locator('[data-slot="content"]', { hasText: 'Not wired up yet — the ask bar ships in the next milestone.' }),
-    ).toBeVisible()
+    // The ask bar is live now: enabled input, and the hint names the ⌘K
+    // shortcut (the full ask flow has its own spec).
+    const askInput = page.getByPlaceholder('Ask about this product…')
+    await expect(askInput).toBeEnabled()
+    await expect(page.getByText('⌘K', { exact: true })).toBeVisible()
 
     // --- Changes list: filter by feature ---
     await page.goto(`/projects/${projectId}/changes`)

@@ -134,6 +134,41 @@ const startingAnalysis = ref(false)
 const syncing = ref(false)
 const busy = computed(() => analysisActive.value || startingAnalysis.value || syncing.value)
 
+// --- Ask bar: Enter navigates to the ask page, ⌘K / Ctrl+K focuses it. ---
+
+const askQuestion = ref('')
+const askInput = useTemplateRef<{ inputRef: HTMLInputElement }>('askInput')
+
+function focusAskInput(): void {
+  askInput.value?.inputRef.focus()
+}
+
+// From anywhere on the overview — including another input — ⌘K jumps to the
+// ask bar. Only other modifier combos (alt/shift) are ignored.
+function onGlobalKeydown(event: KeyboardEvent): void {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
+    return
+  }
+  if (event.key.toLowerCase() !== 'k') {
+    return
+  }
+  event.preventDefault()
+  focusAskInput()
+}
+
+function onAskSubmit(): void {
+  const text = askQuestion.value.trim()
+  if (!text) {
+    return
+  }
+  void navigateTo(`/projects/${projectId}/ask?q=${encodeURIComponent(text)}`)
+}
+
+if (import.meta.client) {
+  onMounted(() => window.addEventListener('keydown', onGlobalKeydown))
+  onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown))
+}
+
 async function onRunAnalysis(): Promise<void> {
   startingAnalysis.value = true
   actionError.value = ''
@@ -202,21 +237,18 @@ async function onDelete() {
 
     <section aria-labelledby="ask-heading" class="space-y-3">
       <h2 id="ask-heading" class="text-sm font-medium uppercase tracking-wide text-muted">Ask</h2>
-      <UTooltip text="Not wired up yet — the ask bar ships in the next milestone.">
-        <!-- The trigger must be a plain element: Nuxt UI forwards the tooltip
-             props onto the disabled input itself, which cannot receive hover
-             events, and the tooltip would never open. -->
-        <span class="block w-full max-w-md cursor-not-allowed">
-          <UInput
-            disabled
-            icon="i-lucide-message-circle-question-mark"
-            placeholder="Ask anything (coming next)"
-            class="w-full"
-            :ui="{ base: 'pointer-events-none' }"
-            aria-label="Ask about this project (coming next)"
-          />
-        </span>
-      </UTooltip>
+      <UInput
+        ref="askInput"
+        v-model="askQuestion"
+        icon="i-lucide-message-circle-question-mark"
+        placeholder="Ask about this product…"
+        aria-label="Ask about this product"
+        class="w-full max-w-md"
+        @keydown.enter="onAskSubmit"
+      />
+      <p class="text-xs text-dimmed">
+        Press <kbd class="rounded border border-default px-1 font-mono text-[11px]">⌘K</kbd> to ask from anywhere on the overview.
+      </p>
     </section>
 
     <section class="space-y-3">

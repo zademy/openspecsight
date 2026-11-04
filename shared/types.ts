@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, AskAnswerSchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -42,9 +42,11 @@ export type ConnectionType = Connections['connections'][number]['type']
 
 /** Project creation payload (POST /api/projects), shared by form and API. */
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>
-
 /** Payload for attaching another repository to a project. */
 export type AddRepositoryInput = z.infer<typeof AddRepositorySchema>
+
+/** Ask question payload (POST /api/projects/:id/ask), shared by form and API. */
+export type AskQuestionInput = z.infer<typeof AskQuestionSchema>
 
 // --- Domain enums (single source of truth for API + DB string literals) ---
 
@@ -294,4 +296,45 @@ export interface AskResult {
   /** True for refusals: empty question, zero coverage, or a covered:false model verdict. */
   refused: boolean
   citations: AskCitation[]
+}
+
+/**
+ * The display-shaped citation the ask API and stored messages carry: what an
+ * `[n]` chip needs to render (code) and link (feature + scenario), plus the
+ * scenario's own "action → outcome" for tooltips. Unlike AskCitation there is
+ * no quote — that backs the model's claim, not the reader's next click.
+ */
+export interface AskCitationLink {
+  index: number
+  scenarioId: number
+  code: string
+  action: string
+  outcome: string
+  featureId: number
+  featureName: string
+}
+
+/** POST /api/projects/:id/ask: one exchange, conversation created or appended. */
+export interface AskExchange {
+  conversationId: number
+  answer: string
+  refused: boolean
+  citations: AskCitationLink[]
+}
+
+export interface ConversationSummary {
+  id: number
+  title: string
+  createdAt: string
+}
+
+export interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+  citations: AskCitationLink[]
+}
+
+export interface ConversationDetail {
+  conversation: { id: number, title: string }
+  messages: ConversationMessage[]
 }

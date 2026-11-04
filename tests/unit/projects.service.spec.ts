@@ -4,9 +4,11 @@ import {
   analyses,
   annotations,
   connections,
+  conversations,
   featureFiles,
   features,
   flows,
+  messages,
   projects,
   repositories,
   releases,
@@ -219,6 +221,13 @@ describe('deleteProject', () => {
       releaseId: release.id, scenarioId: scenario.id, featureId: feature.id, kind: 'new', state: 'applied',
     }).run()
     db.insert(annotations).values({ scenarioId: scenario.id, body: 'note', author: 'operator', createdAt: new Date().toISOString() }).run()
+    const conversation = db.insert(conversations).values({
+      projectId: created.id, title: 'What happens with a wrong password?', pinned: 0, createdAt: new Date().toISOString(),
+    }).returning().get()
+    db.insert(messages).values([
+      { conversationId: conversation.id, role: 'user', content: 'What happens with a wrong password?', citationsJson: null, createdAt: new Date().toISOString() },
+      { conversationId: conversation.id, role: 'assistant', content: 'It shows an error [1].', citationsJson: '[]', createdAt: new Date().toISOString() },
+    ]).run()
     db.insert(analyses).values({
       projectId: created.id, type: 'initial', status: 'done', progress: 100, step: 'done', statsJson: '{}',
       error: null, createdAt: new Date().toISOString(), finishedAt: null,
@@ -226,7 +235,7 @@ describe('deleteProject', () => {
 
     expect(deleteProject(created.id)).toBe(true)
 
-    for (const table of [projects, features, scenarios, featureFiles, connections, flows, releases, scenarioRevisions, annotations, analyses]) {
+    for (const table of [projects, features, scenarios, featureFiles, connections, flows, releases, scenarioRevisions, annotations, analyses, conversations, messages]) {
       expect(db.select().from(table).all()).toHaveLength(0)
     }
     expect(getProjectDetail(created.id)).toBeNull()
