@@ -53,7 +53,7 @@ const DEFAULT_MAX_FILES = 10000
 const DEFAULT_MAX_TOTAL_BYTES = 157286400
 
 /** Stable scenario codes: HP for happy, ED for edge, ER for error paths. */
-const CODE_PREFIX: Record<ScenarioCategory, string> = { happy: 'HP', edge: 'ED', error: 'ER' }
+export const CODE_PREFIX: Record<ScenarioCategory, string> = { happy: 'HP', edge: 'ED', error: 'ER' }
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
 type RepositoryRow = typeof repositories.$inferSelect

@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, CreateProjectSchema, FeatureInventorySchema, FeatureScenariosSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema } from './schemas'
+import type { AddRepositorySchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, FeatureInventorySchema, FeatureScenariosSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -116,4 +116,40 @@ export interface AnalysisStats {
   features: number
   scenarios: number
   files: number
+}
+
+// --- Spec browsing (Task 9) ---
+
+/** Payload for creating a manual scenario (POST /api/features/:featureId/scenarios). */
+export type CreateScenarioInput = z.infer<typeof CreateScenarioSchema>
+
+/** Payload for editing a scenario (PATCH /api/scenarios/:id). */
+export type UpdateScenarioInput = z.infer<typeof UpdateScenarioSchema>
+
+/** Payload for adding an annotation (POST /api/scenarios/:id/annotations). */
+export type CreateAnnotationInput = z.infer<typeof CreateAnnotationSchema>
+
+/** Annotation row as served by the annotations API. */
+export interface AnnotationDTO {
+  id: number
+  scenarioId: number
+  body: string
+  author: string
+  createdAt: string
+}
+
+/** One scenario group as served by GET /api/features/:featureId. */
+export interface ScenarioGroupDTO {
+  context: string
+  scenarios: ScenarioDTO[]
+}
+
+/** A feature with its name, description and scenario groups. */
+export interface FeatureDetail {
+  feature: {
+    id: number
+    name: string
+    description: string
+  }
+  groups: ScenarioGroupDTO[]
 }

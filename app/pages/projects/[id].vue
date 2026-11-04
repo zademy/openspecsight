@@ -1,184 +1,56 @@
 <script setup lang="ts">
+import type { NavigationMenuItem } from '@nuxt/ui'
+
 /**
- * Project overview: repo info, analysis progress/stats, plus the section
- * rail. Changes and Product spec are deliberate placeholders — later tasks
- * replace the muted entries with real sections.
+ * Project shell: the section rail plus the active section page (overview,
+ * product spec, later changes). Real sections link; map/ask/digests stay
+ * muted "coming soon" entries until their tasks land.
  */
 
 const route = useRoute()
 const projectId = route.params.id as string
 
-const { get, remove } = useProjects()
-const { latest } = useAnalyses()
+const { get } = useProjects()
 const { data: project, error } = await useAsyncData(`project-${projectId}`, () => get(projectId))
 
 if (error.value || !project.value) {
   throw createError({ statusCode: 404, statusMessage: 'Project not found', fatal: true })
 }
 
-const { data: analysis } = await useAsyncData(`analysis-${projectId}`, () => latest(projectId))
+const items = computed<NavigationMenuItem[]>(() => [
+  { label: 'Overview', to: `/projects/${projectId}`, active: route.path === `/projects/${projectId}` },
+  { label: 'Product spec', to: `/projects/${projectId}/spec`, active: route.path.startsWith(`/projects/${projectId}/spec`) },
+])
 
-const analysisActive = computed(() => analysis.value?.status === 'queued' || analysis.value?.status === 'running')
-// Poll until a terminal state: a page loaded before the analysis was started
-// sees `null` first and must still pick up the run once it appears.
-const shouldPoll = computed(() => analysis.value?.status !== 'done' && analysis.value?.status !== 'error')
-
-/** Pipeline step → sentence the operator can act on; specific, not generic. */
-const RUNNING_STEP_LABELS: Record<string, string> = {
-  queued: 'Waiting for the analysis queue…',
-  preparing: 'Preparing the scan…',
-  tree: 'Mapping the repository tree…',
-  blobs: 'Reading the repository…',
-  inventory: 'Identifying features…',
-}
-
-const stepLabel = computed(() => {
-  const step = analysis.value?.step ?? ''
-  const scenarios = /^scenarios \((\d+)\/(\d+)\)$/.exec(step)
-  if (scenarios) {
-    return `Writing the spec — feature ${scenarios[1]} of ${scenarios[2]}…`
-  }
-  return RUNNING_STEP_LABELS[step] ?? 'Working on the spec…'
-})
-
-const statsLabel = computed(() => {
-  const stats = analysis.value?.stats
-  if (!stats) {
-    return ''
-  }
-  return [
-    `${stats.features} ${stats.features === 1 ? 'feature' : 'features'}`,
-    `${stats.scenarios} ${stats.scenarios === 1 ? 'scenario' : 'scenarios'}`,
-    `${stats.files} ${stats.files === 1 ? 'file' : 'files'}`,
-  ].join(' · ')
-})
-
-const POLL_INTERVAL_MS = 2000
-let pollTimer: ReturnType<typeof setInterval> | null = null
-
-async function pollLatest(): Promise<void> {
-  try {
-    analysis.value = await latest(projectId)
-  } catch {
-    // Keep the last known state; a transient failure resolves on the next tick.
-  }
-  if (!shouldPoll.value) {
-    stopPolling()
-  }
-}
-
-function startPolling(): void {
-  if (import.meta.server || pollTimer !== null || !shouldPoll.value) {
-    return
-  }
-  pollTimer = setInterval(() => {
-    void pollLatest()
-  }, POLL_INTERVAL_MS)
-}
-
-function stopPolling(): void {
-  if (pollTimer !== null) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
-
-if (import.meta.client) {
-  watch(shouldPoll, (poll) => {
-    if (poll) {
-      startPolling()
-    } else {
-      stopPolling()
-    }
-  }, { immediate: true })
-  onBeforeUnmount(stopPolling)
-}
-
-const confirmingDelete = ref(false)
-const deleting = ref(false)
-
-async function onDelete() {
-  deleting.value = true
-  try {
-    await remove(projectId)
-    // Drop the deleted project from the home list cache before landing there.
-    await refreshNuxtData('projects')
-    await navigateTo('/')
-  } finally {
-    deleting.value = false
-  }
-}
+/** Sections that exist in the product vision but not in this build yet. */
+const COMING_SOON = ['Changes', 'Map', 'Ask', 'Digests']
 </script>
 
 <template>
   <div v-if="project" class="flex flex-col gap-6 sm:flex-row sm:gap-8">
-    <nav class="flex gap-1 sm:w-40 sm:shrink-0 sm:flex-col" aria-label="Project sections">
-      <span class="rounded-md bg-primary/10 px-2 py-1.5 text-sm font-medium text-primary">Overview</span>
-      <span class="rounded-md px-2 py-1.5 text-sm text-muted">Changes</span>
-      <span class="rounded-md px-2 py-1.5 text-sm text-muted">Product spec</span>
-    </nav>
-
-    <div class="min-w-0 flex-1 space-y-8">
-      <UPageHeader
-        :title="project.name"
-        :description="project.description"
-        :links="[{
-          label: 'Delete project',
-          color: 'error',
-          variant: 'ghost',
-          icon: 'i-lucide-trash-2',
-          onClick: () => { confirmingDelete = true },
-        }]"
+    <nav class="sm:w-40 sm:shrink-0" aria-label="Project sections">
+      <!-- Vertical at every width: a compact stacked list on phones, the
+           rail column from sm up. -->
+      <UNavigationMenu
+        :items="items"
+        orientation="vertical"
+        variant="link"
       />
 
-      <section class="space-y-3">
-        <h2 class="text-sm font-medium uppercase tracking-wide text-muted">Repositories</h2>
-        <ul class="space-y-2">
-          <li
-            v-for="repo in project.repositories"
-            :key="`${repo.owner}/${repo.repo}/${repo.branch}`"
-            class="flex flex-wrap items-center gap-2"
-          >
-            <span class="font-mono text-sm text-highlighted">{{ repo.owner }}/{{ repo.repo }}</span>
-            <UBadge color="neutral" variant="subtle" icon="i-lucide-git-branch" :label="repo.branch" class="font-mono text-xs" />
-          </li>
-        </ul>
-      </section>
+      <ul class="mt-4 flex flex-wrap gap-x-3 gap-y-1 sm:mt-6 sm:block sm:space-y-0.5">
+        <li
+          v-for="section in COMING_SOON"
+          :key="section"
+          class="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-dimmed"
+        >
+          <span>{{ section }}</span>
+          <span class="text-xs">soon</span>
+        </li>
+      </ul>
+    </nav>
 
-      <section class="space-y-3">
-        <h2 class="text-sm font-medium uppercase tracking-wide text-muted">Analysis</h2>
-
-        <div v-if="analysisActive" class="max-w-md space-y-2" aria-live="polite">
-          <p class="text-sm text-muted">{{ stepLabel }}</p>
-          <UProgress :model-value="analysis?.progress ?? 0" />
-        </div>
-
-        <div v-else-if="analysis?.status === 'done'" class="flex flex-wrap items-center gap-2 text-sm text-muted">
-          <span>Initial analysis finished.</span>
-          <UBadge v-if="analysis.stats" color="success" variant="subtle" :label="statsLabel" />
-        </div>
-
-        <p v-else-if="analysis?.status === 'error'" class="max-w-prose text-sm text-error">
-          {{ analysis.error }}
-        </p>
-
-        <p v-else class="text-sm text-muted">
-          No analysis has run yet. Once the first scan finishes, features and scenarios appear here.
-        </p>
-      </section>
+    <div class="min-w-0 flex-1">
+      <NuxtPage />
     </div>
-
-    <UModal
-      v-model:open="confirmingDelete"
-      title="Delete project?"
-      :description="`This removes ${project.name} with its repositories, spec and history. This can't be undone.`"
-    >
-      <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton label="Cancel" color="neutral" variant="ghost" @click="confirmingDelete = false" />
-          <UButton label="Delete project" color="error" :loading="deleting" @click="onDelete" />
-        </div>
-      </template>
-    </UModal>
   </div>
 </template>

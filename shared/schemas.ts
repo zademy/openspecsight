@@ -88,3 +88,22 @@ export const CreateProjectSchema = z.object({
 
 /** Payload of POST /api/projects/:id/repositories: another repository of an existing project. */
 export const AddRepositorySchema = CreateProjectSchema.pick({ owner: true, repo: true, branch: true, pat: true })
+
+/**
+ * Payload of POST /api/features/:featureId/scenarios: one operator-written
+ * scenario in the product's "context + action → outcome" shape.
+ */
+export const CreateScenarioSchema = z.object({
+  context: z.string().trim().min(1, 'Context is required').max(200),
+  action: z.string().trim().min(1, 'Action is required').max(500),
+  outcome: z.string().trim().min(1, 'Outcome is required').max(500),
+  category: ScenarioCategorySchema,
+})
+
+/** Payload of PATCH /api/scenarios/:id: any subset of the editable fields. */
+export const UpdateScenarioSchema = CreateScenarioSchema.partial()
+
+/** Payload of POST /api/scenarios/:id/annotations. */
+export const CreateAnnotationSchema = z.object({
+  body: z.string().trim().min(1, 'A note needs some text').max(2000),
+})
