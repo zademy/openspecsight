@@ -164,12 +164,15 @@ async function onReset(): Promise<void> {
 </script>
 
 <template>
+  <!-- The default min-zoom floor (0.5) cannot zoom a wide feature graph
+       into a phone-sized canvas — fit-view would clip trailing nodes. -->
   <VueFlow
     class="map-canvas h-full w-full"
     :nodes="initialNodes"
     :edges="initialEdges"
     :node-types="nodeTypes"
-    :connectable="false"
+    :nodes-connectable="false"
+    :min-zoom="0.2"
     fit-view-on-init
     @node-click="onNodeClick"
     @node-mouse-enter="onNodeHover"
@@ -177,7 +180,9 @@ async function onReset(): Promise<void> {
   >
     <Background :size="2" :gap="24" pattern-color="var(--ui-border-accented)" />
 
-    <Panel position="top-right" class="flex flex-col gap-1">
+    <!-- The corner stack only earns its ~100px of canvas from sm up; touch
+         users pinch and scroll to zoom (Vue Flow defaults). -->
+    <Panel position="top-right" class="hidden flex-col gap-1 sm:flex">
       <UButton icon="i-lucide-plus" aria-label="Zoom in" color="neutral" variant="solid" size="xs" @click="onZoomIn" />
       <UButton icon="i-lucide-minus" aria-label="Zoom out" color="neutral" variant="solid" size="xs" @click="onZoomOut" />
       <UButton icon="i-lucide-focus" aria-label="Fit to view" color="neutral" variant="solid" size="xs" @click="onFit" />

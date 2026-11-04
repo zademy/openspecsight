@@ -109,7 +109,7 @@ async function onRunAnalysis(): Promise<void> {
         />
       </div>
 
-      <div class="map-stage relative h-[480px] overflow-hidden rounded-lg border border-default" :class="{ 'map-stage--fullscreen': fullscreen }">
+      <div class="map-stage relative h-[60vh] overflow-hidden rounded-lg border border-default sm:h-[480px]" :class="{ 'map-stage--fullscreen': fullscreen }">
         <ClientOnly>
           <ProductMapCanvas :data="mapData" :query="search" @open="onOpen" />
           <template #fallback>

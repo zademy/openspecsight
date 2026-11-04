@@ -34,11 +34,11 @@ async function deleteProjectsByName(page: Page, name: string): Promise<void> {
   }
 }
 
-/** Creates the project and runs its initial analysis to a terminal `done`. */
-async function createAnalyzedProject(page: Page): Promise<number> {
-  await deleteProjectsByName(page, 'Map Fixture')
+/** Creates the project and runs its initial analysis to a terminal `done`. The name must be unique per test — fullyParallel workers share the database. */
+async function createAnalyzedProject(page: Page, name: string): Promise<number> {
+  await deleteProjectsByName(page, name)
   const create = await page.request.post('/api/projects', {
-    data: { name: 'Map Fixture', description: 'Exercises the product map UI', owner: 'acme', repo: 'tasks' },
+    data: { name, description: 'Exercises the product map UI', owner: 'acme', repo: 'tasks' },
   })
   expect(create.status()).toBe(201)
   const projectId = ((await create.json()) as { id: number }).id
@@ -57,7 +57,7 @@ async function createAnalyzedProject(page: Page): Promise<number> {
 test.describe('product map', () => {
   test('canvas, edge types, search raise, navigation and fullscreen work together', async ({ page }) => {
     await login(page)
-    const projectId = await createAnalyzedProject(page)
+    const projectId = await createAnalyzedProject(page, 'Map Fixture')
 
     // Review Focus #4: the page must hydrate without a single console error.
     const consoleErrors: string[] = []
@@ -98,6 +98,10 @@ test.describe('product map', () => {
       const tasksNode = page.locator(`.vue-flow__node[data-id="feature-${tasksId}"]`)
       await expect(authNode).toBeVisible()
       await expect(tasksNode).toBeVisible()
+
+      // The corner control stack is an sm-and-up affordance (collapsed on
+      // phones, asserted below on a small viewport).
+      await expect(page.getByRole('button', { name: 'Zoom in' })).toBeVisible()
 
       // Two collapsed edges: Authentication↔Tasks (three merged types) and
       // Login→Task list — and no more.
@@ -143,6 +147,33 @@ test.describe('product map', () => {
       expect(pageErrors, pageErrors.join('\n')).toEqual([])
     } finally {
       await deleteProjectsByName(page, 'Map Fixture')
+    }
+  })
+})
+
+test.describe('product map on a phone', () => {
+  test.use({ viewport: { width: 360, height: 740 } })
+
+  test('the canvas fills in and the control stack collapses', async ({ page }) => {
+    await login(page)
+    const projectId = await createAnalyzedProject(page, 'Map Phone Fixture')
+
+    try {
+      await page.goto(`/projects/${projectId}/map`)
+
+      const canvas = page.locator('.vue-flow')
+      await expect(canvas).toBeVisible()
+
+      // fit-view-on-init frames the whole graph, so a node sits in the
+      // small viewport without scrolling — the canvas is the page's
+      // working surface at 360px.
+      await expect(page.locator('.vue-flow__node').first()).toBeInViewport()
+
+      // The corner control stack is an sm-and-up affordance; on a phone
+      // touch users pinch and scroll to zoom (Vue Flow defaults).
+      await expect(page.getByRole('button', { name: 'Zoom in' })).toBeHidden()
+    } finally {
+      await deleteProjectsByName(page, 'Map Phone Fixture')
     }
   })
 })
