@@ -9,20 +9,24 @@ import type { CreateProjectInput, ProjectDetail, ProjectSummary } from '#shared/
 export function useProjects() {
   const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
 
+  // Response types are given explicitly instead of route-matched: Nuxt 4.6's
+  // $fetch path matching hits TS's instantiation limit once the route union
+  // grows (nuxt/nuxt#36474, #36813) — an explicit object type param resolves
+  // the response without instantiating it.
   function list(): Promise<ProjectSummary[]> {
-    return $fetch('/api/projects', { headers })
+    return $fetch<ProjectSummary[]>('/api/projects', { headers })
   }
 
   function get(id: number | string): Promise<ProjectDetail> {
-    return $fetch(`/api/projects/${id}`, { headers })
+    return $fetch<ProjectDetail>(`/api/projects/${id}`, { headers })
   }
 
   function create(input: CreateProjectInput): Promise<ProjectSummary> {
-    return $fetch('/api/projects', { method: 'POST', body: input })
+    return $fetch<ProjectSummary>('/api/projects', { method: 'POST', body: input })
   }
 
   function remove(id: number | string): Promise<{ ok: boolean }> {
-    return $fetch(`/api/projects/${id}`, { method: 'DELETE' })
+    return $fetch<{ ok: boolean }>(`/api/projects/${id}`, { method: 'DELETE' })
   }
 
   return { list, get, create, remove }

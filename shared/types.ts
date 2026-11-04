@@ -97,3 +97,14 @@ export interface RevisionDTO {
   outcome: string
   before?: { action: string, outcome: string }
 }
+
+/**
+ * Latest analysis progress as served by GET /api/projects/:id/analyses;
+ * clients poll it while status is queued or running.
+ */
+export interface AnalysisProgress {
+  status: AnalysisStatus
+  progress: number
+  step: string
+  error: string | null
+}

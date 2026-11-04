@@ -27,6 +27,11 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    experimental: {
+      // Scan server/tasks/** into runnable Nitro tasks (nitropack 2.x gates
+      // tasks behind this flag). jobs:run drains the queue; no schedule.
+      tasks: true,
+    },
     hooks: {
       // Drizzle migrations are read from disk at runtime (server/db/client.ts
       // resolves them by walking up from its own module), which the bundled

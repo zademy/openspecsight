@@ -46,6 +46,12 @@ function nowISO(): string {
   return new Date().toISOString()
 }
 
+/** Whether a project with this id exists (analyses/sync guards rely on it). */
+export function projectExists(id: number): boolean {
+  return getDB().select({ id: projects.id }).from(projects).where(eq(projects.id, id)).get() !== undefined
+}
+
+
 /**
  * Validates the repository against GitHub and returns the branch to scan:
  * the caller's explicit one when given, otherwise the repository's default
