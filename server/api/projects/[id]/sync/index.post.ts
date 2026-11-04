@@ -6,7 +6,7 @@ import { kickJobProcessing } from '../../../../services/jobs.service'
  * row, enqueues its job and answers 202 immediately. Processing is kicked off
  * in-process via the `jobs:run` Nitro task; clients poll the GET analyses
  * endpoint for progress. A second sync while one is queued or running is
- * rejected with 409.
+ * rejected with 409; retrying a sync that ended in `error` is allowed.
  */
 export default defineEventHandler(async (event) => {
   const rawId = getRouterParam(event, 'id') ?? ''

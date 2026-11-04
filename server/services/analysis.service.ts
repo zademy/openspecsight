@@ -1,6 +1,6 @@
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { getDB, type Database } from '../db/client'
-import { analyses, featureFiles, features, repositories, scenarios } from '../db/schema'
+import { analyses, annotations, featureFiles, features, repositories, scenarios } from '../db/schema'
 import { FeatureInventorySchema, FeatureScenariosSchema } from '../../shared/schemas'
 import type { FeatureInventory, FeatureScenarios, ScenarioCategory } from '../../shared/types'
 import { decryptSecret } from '../utils/crypto'
@@ -30,11 +30,13 @@ import { featureSlug, filterCodeFiles } from './analysis/paths'
  *  5. `done` — stats land in `statsJson` and the repository's lastSyncedSha
  *     is set to the branch head.
  *
- * Re-running is safe by design: starting a fresh analysis wipes the project's
- * previous features / scenarios / featureFiles inside the insert transaction,
- * so a clean-slate re-analysis never doubles rows. Any other thrown error —
- * GitHub failures, schema-invalid LLM output — marks the analysis `error` and
- * rethrows so the jobs queue (Task 7 retry logic) handles the attempts.
+ * Re-running is safe by design: starting a fresh analysis replaces the
+ * project's previous features / scenarios / featureFiles inside the insert
+ * transaction, so a re-analysis never doubles rows — and it spares manual
+ * territory the same way sync does (see replaceSpec). Any other thrown
+ * error — GitHub failures, schema-invalid LLM output — marks the analysis
+ * `error` and rethrows so the jobs queue (Task 7 retry logic) handles the
+ * attempts.
  */
 
 export interface InitialAnalysisPayload {
@@ -56,6 +58,7 @@ const DEFAULT_MAX_TOTAL_BYTES = 157286400
 export const CODE_PREFIX: Record<ScenarioCategory, string> = { happy: 'HP', edge: 'ED', error: 'ER' }
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
+type FeatureRow = typeof features.$inferSelect
 type RepositoryRow = typeof repositories.$inferSelect
 
 export async function runInitialAnalysis(payload: InitialAnalysisPayload, deps: AnalysisDeps = {}): Promise<void> {
@@ -151,43 +154,98 @@ async function analyze(analysisId: number, projectId: number, deps: AnalysisDeps
 }
 
 /**
- * Wipes the project's previous spec rows and writes the inventory's features
- * (depth 2) with their featureFiles inside one transaction, so a crashed
- * analysis never leaves a half-wiped spec behind. Feature ids come back keyed
- * by name so the scenario step can attach to the top-level features.
+ * Replaces the project's spec rows with the inventory's features (depth 2)
+ * inside one transaction, so a crashed analysis never leaves a half-replaced
+ * spec behind. Manual territory survives the replacement the way sync treats
+ * it: manual features are kept untouched, manual scenarios under ai features
+ * survive too (so does their feature row — it has to hold the FK), and a
+ * wiped ai scenario takes its annotations along — no orphaned notes.
+ * Feature ids come back keyed by name so the scenario step can attach to the
+ * top-level features, reusing kept rows instead of doubling them.
  */
 function replaceSpec(projectId: number, inventory: FeatureInventory): { count: number, idsByName: Map<string, number> } {
   return getDB().transaction((tx) => {
-    const existingIds = tx.select({ id: features.id })
-      .from(features)
-      .where(eq(features.projectId, projectId))
-      .all()
-      .map((row) => row.id)
-    if (existingIds.length > 0) {
-      tx.delete(scenarios).where(inArray(scenarios.featureId, existingIds)).run()
-      tx.delete(featureFiles).where(inArray(featureFiles.featureId, existingIds)).run()
-      tx.delete(features).where(eq(features.projectId, projectId)).run()
+    const existing = tx.select().from(features).where(eq(features.projectId, projectId)).all()
+    const keptByName = new Map<string, FeatureRow>()
+
+    if (existing.length > 0) {
+      const allIds = existing.map((feature) => feature.id)
+      const allScenarios = tx.select({
+        id: scenarios.id,
+        featureId: scenarios.featureId,
+        source: scenarios.source,
+      }).from(scenarios).where(inArray(scenarios.featureId, allIds)).all()
+
+      // A feature survives when the operator owns it (source manual) or when
+      // a manual scenario lives under it — sync semantics never delete manual
+      // rows, and a scenario cannot outlive its feature.
+      const manualScenarioFeatures = new Set(
+        allScenarios.filter((row) => row.source === 'manual').map((row) => row.featureId),
+      )
+      const wipedIds = existing
+        .filter((feature) => feature.source === 'ai' && !manualScenarioFeatures.has(feature.id))
+        .map((feature) => feature.id)
+      const wipedScenarioIds = allScenarios
+        .filter((row) => row.source === 'ai' || wipedIds.includes(row.featureId))
+        .map((row) => row.id)
+
+      if (wipedScenarioIds.length > 0) {
+        tx.delete(annotations).where(inArray(annotations.scenarioId, wipedScenarioIds)).run()
+        tx.delete(scenarios).where(inArray(scenarios.id, wipedScenarioIds)).run()
+      }
+      if (wipedIds.length > 0) {
+        tx.delete(featureFiles).where(inArray(featureFiles.featureId, wipedIds)).run()
+        tx.delete(features).where(inArray(features.id, wipedIds)).run()
+      }
+
+      for (const feature of existing) {
+        if (!wipedIds.includes(feature.id)) {
+          keptByName.set(feature.name, feature)
+        }
+      }
     }
 
     const idsByName = new Map<string, number>()
-    let count = 0
-    inventory.features.forEach((feature, index) => {
-      const parent = tx.insert(features).values({
-        projectId, parentId: null, name: feature.name, description: feature.description,
-        sortOrder: index, source: 'ai',
-      }).returning().get()
-      idsByName.set(parent.name, parent.id)
-      count += 1
-      insertFeatureFiles(tx, parent.id, feature.files)
 
-      ;(feature.children ?? []).forEach((child, childIndex) => {
-        const childRow = tx.insert(features).values({
-          projectId, parentId: parent.id, name: child.name, description: child.description,
-          sortOrder: childIndex, source: 'ai',
-        }).returning().get()
-        idsByName.set(childRow.name, childRow.id)
+    /** Reuses a kept row when the inventory still lists it, else inserts fresh. */
+    const upsertFeature = (
+      name: string,
+      description: string,
+      files: string[],
+      parentId: number | null,
+      sortOrder: number,
+    ): number => {
+      const kept = keptByName.get(name)
+      if (kept) {
+        if (kept.source === 'ai') {
+          // Same feature, still ai territory: refresh the ai-owned fields in
+          // place. A manual feature is the operator's — untouched.
+          tx.update(features).set({ description, sortOrder }).where(eq(features.id, kept.id)).run()
+          tx.delete(featureFiles).where(eq(featureFiles.featureId, kept.id)).run()
+          insertFeatureFiles(tx, kept.id, files)
+        }
+        return kept.id
+      }
+      const row = tx.insert(features).values({
+        projectId, parentId, name, description, sortOrder, source: 'ai',
+      }).returning().get()
+      insertFeatureFiles(tx, row.id, files)
+      return row.id
+    }
+
+    let count = keptByName.size
+    inventory.features.forEach((feature, index) => {
+      const parentId = upsertFeature(feature.name, feature.description, feature.files, null, index)
+      idsByName.set(feature.name, parentId)
+      if (!keptByName.has(feature.name)) {
         count += 1
-        insertFeatureFiles(tx, childRow.id, child.files)
+      }
+      ;(feature.children ?? []).forEach((child, childIndex) => {
+        const childId = upsertFeature(child.name, child.description, child.files, parentId, childIndex)
+        idsByName.set(child.name, childId)
+        if (!keptByName.has(child.name)) {
+          count += 1
+        }
       })
     })
 
@@ -201,10 +259,23 @@ function insertFeatureFiles(tx: Transaction, featureId: number, paths: string[])
   }
 }
 
-/** Stores the generated scenarios with stable per-feature, per-category codes. */
+/**
+ * Stores the generated scenarios with stable per-feature, per-category codes.
+ * The counters start past the feature's surviving codes (re-analysis keeps
+ * manual rows), so generated codes never collide with the operator's.
+ */
 function insertScenarios(featureId: number, generated: FeatureScenarios): number {
   const db = getDB()
   const counters: Record<ScenarioCategory, number> = { happy: 0, edge: 0, error: 0 }
+  let nextOrder = 0
+  for (const row of db.select({ code: scenarios.code, sortOrder: scenarios.sortOrder }).from(scenarios).where(eq(scenarios.featureId, featureId)).all()) {
+    for (const category of Object.keys(counters) as ScenarioCategory[]) {
+      if (row.code.startsWith(`${CODE_PREFIX[category]}-`)) {
+        counters[category] = Math.max(counters[category], codeNumber(row.code, category))
+      }
+    }
+    nextOrder = Math.max(nextOrder, row.sortOrder + 1)
+  }
   let inserted = 0
   for (const group of generated.groups) {
     for (const scenario of group.scenarios) {
@@ -216,13 +287,20 @@ function insertScenarios(featureId: number, generated: FeatureScenarios): number
         outcome: scenario.outcome,
         category: scenario.category,
         code: `${CODE_PREFIX[scenario.category]}-${counters[scenario.category]}`,
-        sortOrder: inserted,
+        sortOrder: nextOrder + inserted,
         source: 'ai',
       }).run()
       inserted += 1
     }
   }
   return inserted
+}
+
+/** Numeric suffix of a scenario code (`HP-12` → 12); 0 for alien shapes. */
+function codeNumber(code: string, category: ScenarioCategory): number {
+  const suffix = code.slice(CODE_PREFIX[category].length + 1)
+  const parsed = Number.parseInt(suffix, 10)
+  return Number.isInteger(parsed) ? parsed : 0
 }
 
 /** Parks the analysis as `error` with a human-readable cause. Terminal. */

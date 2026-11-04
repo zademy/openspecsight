@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { analyses, featureFiles, features, projects, repositories, scenarios } from '../../server/db/schema'
+import { analyses, annotations, featureFiles, features, projects, repositories, scenarios } from '../../server/db/schema'
 import { runInitialAnalysis } from '../../server/services/analysis.service'
 import { featureSlug, filterCodeFiles } from '../../server/services/analysis/paths'
 import { GithubError, type GithubTreeEntry } from '../../server/services/github.service'
@@ -197,6 +197,68 @@ describe('runInitialAnalysis', () => {
     expect(db.select().from(features).where(eq(features.projectId, projectId)).all()).toHaveLength(6)
     expect(db.select().from(scenarios).all()).toHaveLength(12)
     expect(db.select().from(featureFiles).all()).toHaveLength(17)
+    expect(db.select().from(analyses).where(eq(analyses.id, second.id)).get()?.status).toBe('done')
+  })
+
+  test('re-analysis spares manual territory and takes wiped ai scenarios annotations along', async () => {
+    const { projectId, analysisId } = insertProjectWithRepo()
+    await runInitialAnalysis({ analysisId, projectId }, fakeDeps())
+    const db = getDB()
+
+    // Operator territory: the Authentication feature goes manual, one of its
+    // scenarios too (with a note), and one scenario under the still-ai Tasks
+    // feature goes manual (with a note) — sync semantics on re-analysis.
+    const byName = new Map(
+      db.select().from(features).where(eq(features.projectId, projectId)).all().map((f) => [f.name, f]),
+    )
+    const auth = byName.get('Authentication')!
+    const tasks = byName.get('Tasks')!
+    const login = byName.get('Login')!
+    db.update(features).set({ source: 'manual' }).where(eq(features.id, auth.id)).run()
+    const authManual = db.select().from(features).where(eq(features.id, auth.id)).get()!
+    const scenarioRows = db.select().from(scenarios).where(inArray(scenarios.featureId, [auth.id, tasks.id])).all()
+    const authHp1 = scenarioRows.find((s) => s.featureId === auth.id && s.code === 'HP-1')!
+    const tasksHp1 = scenarioRows.find((s) => s.featureId === tasks.id && s.code === 'HP-1')!
+    db.update(scenarios).set({ source: 'manual' }).where(eq(scenarios.id, authHp1.id)).run()
+    db.update(scenarios).set({ source: 'manual' }).where(eq(scenarios.id, tasksHp1.id)).run()
+    const authHp1Manual = db.select().from(scenarios).where(eq(scenarios.id, authHp1.id)).get()!
+    const tasksHp1Manual = db.select().from(scenarios).where(eq(scenarios.id, tasksHp1.id)).get()!
+    db.insert(annotations).values({ scenarioId: authHp1.id, body: 'operator note on auth', author: 'operator', createdAt: '2026-11-03T00:05:00.000Z' }).run()
+    db.insert(annotations).values({ scenarioId: tasksHp1.id, body: 'operator note on tasks', author: 'operator', createdAt: '2026-11-03T00:05:00.000Z' }).run()
+
+    const second = db.insert(analyses).values({
+      projectId, type: 'initial', status: 'queued', progress: 0, step: 'queued',
+      statsJson: '{}', error: null, createdAt: '2026-11-03T00:01:00.000Z', finishedAt: null,
+    }).returning().get()
+    await runInitialAnalysis({ analysisId: second.id, projectId }, fakeDeps())
+
+    // The manual feature row survives byte-for-byte — untouched by the rebuild.
+    expect(db.select().from(features).where(eq(features.id, auth.id)).get()).toEqual(authManual)
+    // A manual scenario under a kept-ai feature survives too, with its note.
+    expect(db.select().from(scenarios).where(eq(scenarios.id, tasksHp1.id)).get()).toEqual(tasksHp1Manual)
+    // The manual scenario under the manual feature survives with its note.
+    expect(db.select().from(scenarios).where(eq(scenarios.id, authHp1.id)).get()).toEqual(authHp1Manual)
+    expect(db.select().from(annotations).where(eq(annotations.scenarioId, authHp1.id)).all()).toHaveLength(1)
+    expect(db.select().from(annotations).where(eq(annotations.scenarioId, tasksHp1.id)).all()).toHaveLength(1)
+    // Wiped ai scenarios took their annotations along — none orphaned, none left.
+    expect(db.select().from(annotations).all()).toHaveLength(2)
+
+    // Ai-only features were wiped and rebuilt fresh (new ids, same names).
+    const loginAfter = db.select().from(features).where(eq(features.name, 'Login')).get()
+    expect(loginAfter).toBeDefined()
+    expect(loginAfter?.id).not.toBe(login.id)
+    // The spec is whole again: same feature count, regenerated scenarios plus
+    // the two manual survivors, and the regenerated codes start past the
+    // surviving ones instead of colliding.
+    const featureRows = db.select().from(features).where(eq(features.projectId, projectId)).all()
+    expect(featureRows).toHaveLength(6)
+    const scenarioRowsAfter = db.select().from(scenarios).all()
+    expect(scenarioRowsAfter).toHaveLength(14)
+    const authCodes = scenarioRowsAfter
+      .filter((s) => s.featureId === auth.id)
+      .map((s) => s.code)
+    expect(authCodes).toContain('HP-1')
+    expect(new Set(authCodes).size).toBe(authCodes.length)
     expect(db.select().from(analyses).where(eq(analyses.id, second.id)).get()?.status).toBe('done')
   })
 

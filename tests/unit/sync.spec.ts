@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
 import { analyses, annotations, features, jobs, projects, releases, repositories, scenarioRevisions, scenarios } from '../../server/db/schema'
@@ -322,6 +322,22 @@ describe('startSync', () => {
     getDB().update(jobs).set({ status: 'done' }).where(eq(jobs.id, jobId)).run()
     const started = startSync(projectId)
     expect(started).toBeGreaterThan(0)
+  })
+
+  test('a failed sync is startable again — the errored sync analyses row does not block', async () => {
+    const projectId = await seedAnalyzedProject()
+    const firstJobId = startSync(projectId)!
+    // The queue parked the job and the pipeline errored its analyses row.
+    getDB().update(jobs).set({ status: 'error', finishedAt: '2026-11-03T00:02:00.000Z' }).where(eq(jobs.id, firstJobId)).run()
+    getDB().update(analyses).set({ status: 'error', error: 'provider exploded', finishedAt: '2026-11-03T00:02:00.000Z' })
+      .where(and(eq(analyses.projectId, projectId), eq(analyses.type, 'sync'))).run()
+    expect(latestAnalysis(projectId)).toMatchObject({ type: 'sync', status: 'error' })
+
+    // Retry: diff data is intact, lastSyncedSha untouched, sync is transactional.
+    const secondJobId = startSync(projectId)
+
+    expect(secondJobId).toBeGreaterThan(0)
+    expect(latestAnalysis(projectId)).toMatchObject({ type: 'sync', status: 'queued', step: 'queued' })
   })
 
   test('a queued sync job from another project does not block', async () => {

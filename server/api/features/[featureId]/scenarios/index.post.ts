@@ -3,8 +3,10 @@ import { createManualScenario } from '../../../../services/spec.service'
 
 /**
  * Adds an operator-written scenario to a feature. Created with
- * `source='manual'` and the next free code in its category, so the initial
- * analysis and later syncs never overwrite it.
+ * `source='manual'` and the next free code in its category, so neither the
+ * initial analysis, a re-analysis, nor later syncs ever overwrite it —
+ * re-analysis preserves manual rows (and their annotations) instead of
+ * wiping them.
  */
 export default defineEventHandler(async (event) => {
   const rawId = getRouterParam(event, 'featureId') ?? ''

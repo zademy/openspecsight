@@ -29,9 +29,15 @@ const analysisActive = computed(() => analysis.value?.status === 'queued' || ana
 const shouldPoll = computed(() => analysis.value?.status !== 'done' && analysis.value?.status !== 'error')
 
 // Operators can only start what has not happened yet: the first scan on a
-// fresh project (or a retry after an error), and a sync once a spec exists.
+// fresh project (or a retry after an error), and a sync once a spec exists —
+// a failed sync leaves the spec intact, so it is retryable, while a failed
+// analysis is not (start a fresh one).
 const canRunAnalysis = computed(() => analysis.value === null || analysis.value.status === 'error')
-const canSync = computed(() => analysis.value?.status === 'done' && (project.value?.repositories.length ?? 0) > 0)
+const canSync = computed(() => {
+  const specReady = analysis.value?.status === 'done'
+    || (analysis.value?.type === 'sync' && analysis.value.status === 'error')
+  return specReady && (project.value?.repositories.length ?? 0) > 0
+})
 
 /** Pipeline step → sentence the operator can act on; specific, not generic. */
 const RUNNING_STEP_LABELS: Record<string, string> = {

@@ -95,7 +95,10 @@ function nowISO(): string {
  * Starts a sync for the project: creates the queued `sync` analyses row,
  * enqueues its job and answers with the job id. Returns `null` when the
  * project does not exist and throws SyncInProgressError when a sync job for
- * the project is already `queued|running` in the jobs table.
+ * the project is already `queued|running` in the jobs table. A sync whose
+ * latest run ended in `error` is startable again — the diff data is intact,
+ * lastSyncedSha is untouched, and a sync applies everything in one
+ * transaction, so retrying is safe.
  */
 export function startSync(projectId: number): number | null {
   const db = getDB()
