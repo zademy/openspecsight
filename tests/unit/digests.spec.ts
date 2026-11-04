@@ -80,6 +80,11 @@ function seedRevision(releaseId: number, featureId: number, kind: 'new' | 'chang
   }).run()
 }
 
+/** Full ISO stamp whose UTC calendar day is n days before today's UTC day. */
+function daysAgoIso(n: number): string {
+  return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
+}
+
 beforeEach(() => {
   process.env.DATABASE_PATH = ':memory:'
   resetDB()
@@ -205,7 +210,8 @@ describe('startDigest', () => {
   })
 
   test('enqueues a digest job and falls back to the default range', () => {
-    seedRelease({ title: 'Tighter sign-in checks', committedAt: '2026-11-02T09:30:00Z' })
+    // Two days back sits inside the default last-seven-days range on any run date.
+    seedRelease({ title: 'Tighter sign-in checks', committedAt: daysAgoIso(2) })
 
     const jobId = startDigest(projectId)
     expect(jobId).not.toBeNull()
@@ -291,13 +297,14 @@ describe('weekly digests', () => {
   })
 
   test('runWeeklyDigests generates one digest per active project and reports the delivery stub', async () => {
-    seedRelease({ title: 'In range', committedAt: '2026-11-02T09:30:00Z' })
+    // Today-relative seeds: the weekly run uses the default (today-relative) range.
+    seedRelease({ title: 'In range', committedAt: daysAgoIso(2) })
     seedRelease({ title: 'Only old work', committedAt: '2026-10-01T10:00:00Z', projectId: emptyProjectId })
     const llm = scriptedLlm({ title: 'Weekly digest', blocks: [{ type: 'paragraph', text: 'One release shipped.' }] })
 
     const run = await runWeeklyDigests({ enabled: true, llm })
     expect(run.enabled).toBe(true)
-    expect(run.rangeFrom).toBe('2026-10-28')
+    expect(run.rangeFrom).toBe(defaultDigestRange().rangeFrom)
     expect(run.outcomes).toHaveLength(1)
     expect(run.outcomes[0]!.projectId).toBe(projectId)
     expect(run.outcomes[0]!.sent).toBe(false)
@@ -307,7 +314,7 @@ describe('weekly digests', () => {
   })
 
   test('a project that fails mid-run does not stop the others', async () => {
-    seedRelease({ title: 'In range', committedAt: '2026-11-02T09:30:00Z' })
+    seedRelease({ title: 'In range', committedAt: daysAgoIso(2) })
     const otherProject = getDB().insert(projects).values({
       name: 'Third Fixture',
       description: 'Releases in range but a broken llm run',
@@ -331,7 +338,7 @@ describe('weekly digests', () => {
       summary: 'summary',
       authorsJson: '[]',
       message: 'message',
-      committedAt: '2026-11-02T09:30:00Z',
+      committedAt: daysAgoIso(2),
     }).run()
 
     let calls = 0

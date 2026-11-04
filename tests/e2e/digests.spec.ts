@@ -30,6 +30,19 @@ function openServerDb(): Database.Database {
   throw new Error('e2e server database not found (expected .output/data/test-e2e.db or data/test-e2e.db)')
 }
 
+/**
+ * Rewrites the project's release timestamps to yesterday (full ISO, UTC date
+ * = today − 1). The stub fixtures carry static committedAt values, while the
+ * "New digest" modal under test uses the default last-seven-days range —
+ * backdating keeps that default range non-empty on any future run date.
+ */
+function backdateReleasesToYesterday(projectId: number): void {
+  const db = openServerDb()
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  db.prepare('UPDATE releases SET committedAt = ? WHERE projectId = ?').run(yesterday, projectId)
+  db.close()
+}
+
 async function setStubState(page: Page, repo: string, state: 'initial' | 'after-auth-commit'): Promise<void> {
   const response = await page.request.post(STUB_ADMIN, { data: { repo, state } })
   expect(response.status()).toBe(200)
@@ -90,6 +103,9 @@ test.describe('digests', () => {
 
     try {
       await analysisAndSync(page, UI_REPO, projectId)
+      // The digest under test uses the modal's default (today-relative) range;
+      // the fixture's static release date must not decide whether it's empty.
+      backdateReleasesToYesterday(projectId)
 
       // The rail gains "Digests" once the section exists.
       await page.goto(`/projects/${projectId}`)
