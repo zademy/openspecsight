@@ -96,7 +96,7 @@ async function onEmail() {
         @click="onEmail"
       />
       <p v-if="!smtpConfigured" class="text-sm text-muted">
-        SMTP is not configured — set SMTP_* in .env to enable email
+        SMTP is not configured. Set SMTP_* in .env to enable email
       </p>
       <p v-else-if="sendNote" class="text-sm text-error" role="alert">{{ sendNote }}</p>
     </div>

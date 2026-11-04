@@ -142,7 +142,7 @@ test.describe('digests', () => {
       // missing — it never pretends a digest went out.
       const emailButton = page.getByRole('button', { name: 'Email to recipients' })
       await expect(emailButton).toBeDisabled()
-      await expect(page.getByText('SMTP is not configured — set SMTP_* in .env to enable email')).toBeVisible()
+      await expect(page.getByText('SMTP is not configured. Set SMTP_* in .env to enable email')).toBeVisible()
 
       // The stored digest carries the fixture blocks verbatim and no email stamp.
       const digestId = Number(path.basename(page.url()))
