@@ -68,6 +68,21 @@ For private repositories, set a `GITHUB_TOKEN` (or paste a personal access token
 when creating a project). Tokens are encrypted with `SESSION_SECRET` before they
 are stored and are never included in an API response.
 
+## Product map, flows, and Ask
+
+The analysis reads more out of your code than the scenario list. It records how
+features relate — the **Product map** section draws those relations as a graph
+you can search and click through into the spec — and how a feature behaves,
+drawn as a flow diagram next to its scenarios. **Ask** is a question box over
+the same data: it retrieves scenarios, answers only from them, and links every
+claim to the scenario row it came from. When the spec doesn't cover a question,
+Ask says so instead of inventing an answer.
+
+In mock mode all three run on fixtures: the map, the flows, and the ask answers
+come from checked-in data, no provider keys needed. With a real provider, each
+sync refreshes the map and flows for the features a commit touched, and ask
+answers come from your configured model — still grounded in the stored spec.
+
 ## Scripts
 
 | Command           | Description                                  |
