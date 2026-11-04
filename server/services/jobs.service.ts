@@ -139,14 +139,22 @@ function projectIsDeleted(payload: JobPayload): boolean {
 }
 
 /**
- * Fire-and-forget trigger asking this server to drain the queue through the
- * `jobs:run` Nitro task endpoint. Intentionally not awaited — enqueueing must
- * stay fast, and processing failures surface in the job rows. If the kick
- * fails, queued jobs stay durable until the next kick or a manual
- * `npx nuxt task run jobs:run`.
+ * Contract nitro's auto-imported `runTask` satisfies. Kept structural so the
+ * kick is unit-testable without the nitro runtime (which cannot be imported
+ * outside a nitro bundle).
  */
-export function kickJobProcessing(origin: string): void {
-  void fetch(new URL('/_nitro/tasks/jobs:run', origin), { method: 'POST' }).catch(() => {
+export type JobTaskRunner = (name: string, options?: { payload?: Record<string, unknown> }) => Promise<unknown>
+
+/**
+ * Fire-and-forget trigger that drains the queue by running the `jobs:run`
+ * task in-process. Intentionally not awaited — enqueueing must stay fast, and
+ * processing failures surface in the job rows. The runner (nitro's `runTask`)
+ * is injected by the caller, so no task HTTP endpoint is needed on built
+ * servers. If the kick fails, queued jobs stay durable until the next kick or
+ * a manual `npx nuxt task run jobs:run`.
+ */
+export function kickJobProcessing(runTask: JobTaskRunner): void {
+  void runTask('jobs:run', { payload: {} }).catch(() => {
     // Leftover jobs remain queued; the next enqueue or manual task run drains them.
   })
 }

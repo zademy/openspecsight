@@ -7,7 +7,7 @@ import {
   getLatestAnalysis,
   startInitialAnalysis,
 } from '../../server/services/analyses.service'
-import { enqueueJob, processNextJobs, registerJobHandler } from '../../server/services/jobs.service'
+import { enqueueJob, kickJobProcessing, processNextJobs, registerJobHandler } from '../../server/services/jobs.service'
 
 /**
  * Jobs queue tests run against a :memory: database with no plugin registered,
@@ -250,5 +250,28 @@ describe('getLatestAnalysis', () => {
     const projectId = insertProject('No Analyses')
 
     expect(getLatestAnalysis(projectId)).toBeNull()
+  })
+})
+
+describe('kickJobProcessing', () => {
+  test('runs the jobs:run task once, in-process, with an empty payload', () => {
+    const runs: Array<{ name: string, payload: Record<string, unknown> }> = []
+    const result = kickJobProcessing(async (name, options) => {
+      runs.push({ name, payload: options?.payload ?? {} })
+    })
+
+    expect(result).toBeUndefined()
+    expect(runs).toEqual([{ name: 'jobs:run', payload: {} }])
+  })
+
+  test('swallows a rejected runner so the rejection never surfaces', async () => {
+    kickJobProcessing(async () => {
+      throw new Error('task runner exploded')
+    })
+
+    // The kick handles the rejection internally; flushing the microtask queue
+    // would fail this test through vitest's unhandled-rejection detection if
+    // the rejected promise had been left dangling.
+    await new Promise((resolve) => setTimeout(resolve, 0))
   })
 })

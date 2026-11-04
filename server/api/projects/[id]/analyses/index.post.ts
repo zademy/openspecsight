@@ -4,8 +4,8 @@ import { kickJobProcessing } from '../../../../services/jobs.service'
 /**
  * Starts the initial analysis of a project: creates the queued analyses row,
  * enqueues its job and answers 202 immediately. Processing is kicked off
- * asynchronously against the `jobs:run` Nitro task; clients poll the GET
- * endpoint for progress.
+ * in-process via the `jobs:run` Nitro task; clients poll the GET endpoint for
+ * progress.
  */
 export default defineEventHandler(async (event) => {
   const rawId = getRouterParam(event, 'id') ?? ''
@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
   }
 
   setResponseStatus(event, 202)
-  kickJobProcessing(getRequestURL(event).origin)
+  // runTask is a nitro auto-import; in-process on dev and built servers alike.
+  kickJobProcessing(runTask)
   return { analysisId }
 })

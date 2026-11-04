@@ -2,11 +2,11 @@ import { expect, test, type Page } from '@playwright/test'
 
 /**
  * Jobs queue end to end against the production build: POST analyses answers
- * 202 immediately, the fire-and-forget kick reaches the `jobs:run` Nitro task
- * (mirrored by the jobs plugin for built servers, since Nitro only exposes
- * task routes on the dev server), and the noop initial-analysis pipeline
- * drives the row to done. The 409-while-active guard is pinned in unit tests
- * — the noop finishes in milliseconds, too fast to race from e2e.
+ * 202 immediately, the fire-and-forget kick runs the `jobs:run` Nitro task
+ * in-process (nitro's own /_nitro/tasks/* routes exist on the dev server only,
+ * and the built server must not expose them), and the noop initial-analysis
+ * pipeline drives the row to done. The 409-while-active guard is pinned in
+ * unit tests — the noop finishes in milliseconds, too fast to race from e2e.
  *
  * Like projects.spec.ts, the GitHub stub answers `acme/tasks` and the created
  * project is deleted afterwards to keep the persistent e2e database clean.
@@ -59,6 +59,13 @@ test.describe('jobs queue', () => {
         const progressResponse = await page.request.get(`/api/projects/${project.id}/analyses`)
         return (await progressResponse.json()) as AnalysisProgress
       }, { timeout: 15_000 }).toMatchObject({ status: 'done', progress: 100, error: null })
+
+      // The built server must not expose the task runner over HTTP: the kick
+      // runs the task in-process, and nitro's own /_nitro/tasks/* routes exist
+      // on the dev server only. If the route existed, this would answer 200
+      // with the task result instead of the app's 404 error page.
+      const taskMirror = await page.request.post('/_nitro/tasks/jobs:run')
+      expect(taskMirror.status()).toBe(404)
     } finally {
       await page.request.delete(`/api/projects/${project.id}`)
     }
