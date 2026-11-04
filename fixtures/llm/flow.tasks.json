@@ -1,0 +1,27 @@
+{
+  "nodes": [
+    { "id": "start", "kind": "start", "label": "User opens the task list" },
+    { "id": "browse", "kind": "step", "label": "Browse tasks grouped by due date", "scenarioCode": "ED-1" },
+    { "id": "new-task", "kind": "step", "label": "Type a title and pick a due date", "scenarioCode": "HP-1" },
+    { "id": "limit", "kind": "decision", "label": "Task limit reached?" },
+    { "id": "blocked", "kind": "error", "label": "Create button stays disabled", "scenarioCode": "ER-1" },
+    { "id": "created", "kind": "step", "label": "Task appears under its due date" },
+    { "id": "complete", "kind": "step", "label": "Check the task's checkbox", "scenarioCode": "HP-2" },
+    { "id": "stale", "kind": "error", "label": "Show 'Task no longer exists'", "scenarioCode": "ER-2" },
+    { "id": "reopen", "kind": "step", "label": "Uncheck the completed task", "scenarioCode": "HP-3" },
+    { "id": "end", "kind": "end", "label": "Task list reflects the changes" }
+  ],
+  "edges": [
+    { "from": "start", "to": "browse" },
+    { "from": "browse", "to": "new-task" },
+    { "from": "new-task", "to": "limit" },
+    { "from": "limit", "to": "created", "label": "no" },
+    { "from": "limit", "to": "blocked", "label": "yes" },
+    { "from": "blocked", "to": "new-task", "label": "edit title" },
+    { "from": "created", "to": "complete" },
+    { "from": "complete", "to": "stale", "label": "already deleted" },
+    { "from": "complete", "to": "reopen", "label": "undo" },
+    { "from": "stale", "to": "end" },
+    { "from": "reopen", "to": "end" }
+  ]
+}

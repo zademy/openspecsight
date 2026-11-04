@@ -1,5 +1,6 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
+import { connectionTypes } from '../../shared/schemas'
 
 export const projects = sqliteTable('projects', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -102,14 +103,6 @@ export const jobs = sqliteTable('jobs', {
   createdAt: text('createdAt').notNull(),
   finishedAt: text('finishedAt'),
 })
-
-/**
- * Feature-to-feature relations shown on the product map. SQLite has no
- * enum type, so the 9 kinds live at the TS level.
- */
-export const connectionTypes = ['leads_to', 'triggers', 'depends_on', 'shares_data', 'authenticates', 'notifies', 'configures', 'embeds_in', 'competes_with'] as const
-
-export type ConnectionType = (typeof connectionTypes)[number]
 
 export const connections = sqliteTable('connections', {
   id: integer('id').primaryKey({ autoIncrement: true }),

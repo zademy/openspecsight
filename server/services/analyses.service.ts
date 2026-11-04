@@ -86,7 +86,16 @@ function parseStats(statsJson: string): AnalysisStats | null {
   try {
     const raw = JSON.parse(statsJson) as Partial<AnalysisStats>
     if (typeof raw.features === 'number' && typeof raw.scenarios === 'number' && typeof raw.files === 'number') {
-      return { features: raw.features, scenarios: raw.scenarios, files: raw.files }
+      // Rows finished before Plan 2 have no map counts in statsJson; 0 is the
+      // truthful value for them — no connections or flows were ever stored.
+      return {
+        features: raw.features,
+        scenarios: raw.scenarios,
+        files: raw.files,
+        connections: raw.connections ?? 0,
+        connectionsSkipped: raw.connectionsSkipped ?? 0,
+        flows: raw.flows ?? 0,
+      }
     }
   } catch {
     // Fall through: the row was never finished (statsJson still '{}').

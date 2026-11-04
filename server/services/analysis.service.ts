@@ -1,8 +1,8 @@
 import { asc, eq, inArray } from 'drizzle-orm'
 import { getDB, type Database } from '../db/client'
-import { analyses, annotations, featureFiles, features, repositories, scenarios } from '../db/schema'
-import { FeatureInventorySchema, FeatureScenariosSchema } from '../../shared/schemas'
-import type { FeatureInventory, FeatureScenarios, ScenarioCategory } from '../../shared/types'
+import { analyses, annotations, connections, featureFiles, features, flows, repositories, scenarios } from '../db/schema'
+import { ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema } from '../../shared/schemas'
+import type { Connections, FeatureInventory, FeatureScenarios, FlowGraph, ScenarioCategory } from '../../shared/types'
 import { decryptSecret } from '../utils/crypto'
 import { createGithubService, type GithubService } from './github.service'
 import { createLlmClient, type LlmClient } from './llm.service'
@@ -27,13 +27,19 @@ import { featureSlug, filterCodeFiles } from './analysis/paths'
  *  4. `scenarios (n/m)` — one generate() call per top-level feature, then the
  *     scenarios are stored grouped by context with stable codes (HP-n / ED-n /
  *     ER-n counters per feature and category).
- *  5. `done` — stats land in `statsJson` and the repository's lastSyncedSha
+ *  5. `connections` — one generate() call maps how the features relate; rows
+ *     referencing unknown features, self-links and duplicate triples are
+ *     dropped before insert and counted in the stats.
+ *  6. `flows (n/m)` — one generate() call per top-level feature renders its
+ *     control-flow graph (nodes reference the stored scenario codes).
+ *  7. `done` — stats land in `statsJson` and the repository's lastSyncedSha
  *     is set to the branch head.
  *
  * Re-running is safe by design: starting a fresh analysis replaces the
- * project's previous features / scenarios / featureFiles inside the insert
- * transaction, so a re-analysis never doubles rows — and it spares manual
- * territory the same way sync does (see replaceSpec). Any other thrown
+ * project's previous features / scenarios / featureFiles — and wipes its
+ * connections + flows (pure analysis output, regenerated from scratch) —
+ * inside the insert transaction, so a re-analysis never doubles rows — and
+ * it spares manual territory the same way sync does (see replaceSpec). Any other thrown
  * error — GitHub failures, schema-invalid LLM output — marks the analysis
  * `error` and rethrows so the jobs queue (Task 7 retry logic) handles the
  * attempts.
@@ -138,6 +144,25 @@ async function analyze(analysisId: number, projectId: number, deps: AnalysisDeps
     }
   }
 
+  setStep(92, 'connections')
+  const generatedConnections = await llm.generate('connections', ConnectionsSchema, buildConnectionsDigest(inventory))
+  const { inserted: connectionCount, skipped: connectionsSkipped } = storeConnections(projectId, idsByName, generatedConnections)
+
+  let flowCount = 0
+  for (const [index, feature] of topLevel.entries()) {
+    setStep(94 + Math.round((3 * (index + 1)) / topLevel.length), `flows (${index + 1}/${topLevel.length})`)
+    const featureId = idsByName.get(feature.name)
+    if (featureId !== undefined) {
+      const graph = await llm.generate(
+        `flow:${featureSlug(feature.name)}`,
+        FlowGraphSchema,
+        buildFlowDigest(feature.name, feature.description, featureId),
+      )
+      upsertFlow(featureId, graph)
+      flowCount += 1
+    }
+  }
+
   const head = await github.listCommits(repository.owner, repository.repo, repository.branch, 1)
   if (head[0]) {
     db.update(repositories).set({ lastSyncedSha: head[0].sha }).where(eq(repositories.id, repository.id)).run()
@@ -147,7 +172,7 @@ async function analyze(analysisId: number, projectId: number, deps: AnalysisDeps
     status: 'done',
     progress: 100,
     step: 'done',
-    statsJson: JSON.stringify({ features: count, scenarios: scenarioCount, files: files.length }),
+    statsJson: JSON.stringify({ features: count, scenarios: scenarioCount, files: files.length, connections: connectionCount, connectionsSkipped, flows: flowCount }),
     error: null,
     finishedAt: nowISO(),
   }).where(eq(analyses.id, analysisId)).run()
@@ -170,6 +195,14 @@ function replaceSpec(projectId: number, inventory: FeatureInventory): { count: n
 
     if (existing.length > 0) {
       const allIds = existing.map((feature) => feature.id)
+
+      // Connections and flows are pure analysis output with no manual
+      // variants, so a re-analysis regenerates them from scratch. The wipe
+      // must precede any feature delete: both tables reference features by
+      // foreign key, and SQLite enforces it.
+      tx.delete(connections).where(eq(connections.projectId, projectId)).run()
+      tx.delete(flows).where(inArray(flows.featureId, allIds)).run()
+
       const allScenarios = tx.select({
         id: scenarios.id,
         featureId: scenarios.featureId,
@@ -294,6 +327,82 @@ function insertScenarios(featureId: number, generated: FeatureScenarios): number
     }
   }
   return inserted
+}
+
+/**
+ * Prompt for the connections step: every stored feature name with its
+ * description (children indented), since relations may reference them too.
+ */
+function buildConnectionsDigest(inventory: FeatureInventory): string {
+  const lines: string[] = []
+  for (const feature of inventory.features) {
+    lines.push(`- ${feature.name}: ${feature.description}`)
+    for (const child of feature.children ?? []) {
+      lines.push(`  - ${child.name}: ${child.description}`)
+    }
+  }
+  return [
+    'Features of the repository (indented lines are sub-features):',
+    ...lines,
+    '',
+    'Describe how these features relate to each other. Use each feature\'s exact name as spelled above.',
+  ].join('\n')
+}
+
+/**
+ * Stores the generated relations, dropping everything the map cannot draw:
+ * self-links, unknown feature names and repeated (from, to, type) triples.
+ * Returns the kept and dropped counts for the stats badge.
+ */
+function storeConnections(projectId: number, idsByName: Map<string, number>, generated: Connections): { inserted: number, skipped: number } {
+  const db = getDB()
+  const seen = new Set<string>()
+  let inserted = 0
+  let skipped = 0
+  for (const connection of generated.connections) {
+    const fromId = idsByName.get(connection.fromFeature)
+    const toId = idsByName.get(connection.toFeature)
+    const key = `${connection.fromFeature}|${connection.toFeature}|${connection.type}`
+    if (fromId === undefined || toId === undefined || fromId === toId || seen.has(key)) {
+      skipped += 1
+      continue
+    }
+    seen.add(key)
+    db.insert(connections).values({ projectId, fromFeatureId: fromId, toFeatureId: toId, type: connection.type }).run()
+    inserted += 1
+  }
+  return { inserted, skipped }
+}
+
+/**
+ * Prompt for one feature's flow graph: the stored scenarios carry their final
+ * codes (HP-1 / ED-1 / ER-1…), so generated nodes can reference them — manual
+ * scenarios included, a flow may legitimately run through operator territory.
+ */
+function buildFlowDigest(name: string, description: string, featureId: number): string {
+  const rows = getDB().select({
+    code: scenarios.code,
+    category: scenarios.category,
+    action: scenarios.action,
+    outcome: scenarios.outcome,
+  }).from(scenarios).where(eq(scenarios.featureId, featureId)).orderBy(asc(scenarios.sortOrder)).all()
+  const lines = rows.map((row) => `- [${row.code}] (${row.category}) ${row.action} → ${row.outcome}`)
+  return [
+    `Feature: ${name} — ${description}`,
+    '',
+    'Scenarios (code in brackets):',
+    ...lines,
+    '',
+    'Draw the feature\'s control flow: a start node, concrete steps, at least one decision with labeled branches, the error paths, and an end node. Set scenarioCode on the nodes that implement a bracketed scenario.',
+  ].join('\n')
+}
+
+/** Upsert keyed by the flow's unique featureId: one graph per feature. */
+function upsertFlow(featureId: number, graph: FlowGraph): void {
+  const graphJson = JSON.stringify(graph)
+  getDB().insert(flows).values({ featureId, graphJson })
+    .onConflictDoUpdate({ target: flows.featureId, set: { graphJson } })
+    .run()
 }
 
 /** Numeric suffix of a scenario code (`HP-12` → 12); 0 for alien shapes. */

@@ -379,7 +379,8 @@ describe('getLatestAnalysis', () => {
       error: null, createdAt: '2026-11-03T00:00:00.000Z', finishedAt: '2026-11-03T00:01:00.000Z',
     }).run()
 
-    expect(getLatestAnalysis(projectId)?.stats).toEqual({ features: 6, scenarios: 12, files: 7 })
+    // Pre-Plan-2 statsJson carries no map counts; parseStats defaults them to 0.
+    expect(getLatestAnalysis(projectId)?.stats).toEqual({ features: 6, scenarios: 12, files: 7, connections: 0, connectionsSkipped: 0, flows: 0 })
   })
 
   test('returns null when the project has no analyses', () => {

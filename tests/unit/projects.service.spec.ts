@@ -3,8 +3,10 @@ import { getDB, resetDB } from '../../server/db/client'
 import {
   analyses,
   annotations,
+  connections,
   featureFiles,
   features,
+  flows,
   projects,
   repositories,
   releases,
@@ -204,6 +206,10 @@ describe('deleteProject', () => {
       featureId: feature.id, context: 'c', action: 'a', outcome: 'o', category: 'happy', code: 'HP-1', sortOrder: 0, source: 'ai',
     }).returning().get()
     db.insert(featureFiles).values({ featureId: feature.id, path: 'src/a.ts' }).run()
+    db.insert(connections).values({
+      projectId: created.id, fromFeatureId: feature.id, toFeatureId: feature.id, type: 'triggers',
+    }).run()
+    db.insert(flows).values({ featureId: feature.id, graphJson: '{}' }).run()
     const repository = db.select().from(repositories).all().find((r) => r.projectId === created.id)
     const release = db.insert(releases).values({
       projectId: created.id, repositoryId: repository?.id ?? 0, sha: 'abc', title: 't', category: 'feature',
@@ -220,7 +226,7 @@ describe('deleteProject', () => {
 
     expect(deleteProject(created.id)).toBe(true)
 
-    for (const table of [projects, features, scenarios, featureFiles, releases, scenarioRevisions, annotations, analyses]) {
+    for (const table of [projects, features, scenarios, featureFiles, connections, flows, releases, scenarioRevisions, annotations, analyses]) {
       expect(db.select().from(table).all()).toHaveLength(0)
     }
     expect(getProjectDetail(created.id)).toBeNull()

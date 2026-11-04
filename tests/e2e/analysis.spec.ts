@@ -56,7 +56,7 @@ test.describe('initial analysis', () => {
       const body = (await progress.json()) as AnalysisProgress
       expect(body.status).toBe('done')
       expect(body.progress).toBe(100)
-      expect(body.stats).toEqual({ features: 6, scenarios: 12, files: 7 })
+      expect(body.stats).toEqual({ features: 6, scenarios: 12, files: 7, connections: 4, connectionsSkipped: 2, flows: 2 })
     } finally {
       await deleteProjectsByName(page, 'Analysis Fixture')
     }

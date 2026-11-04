@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -15,6 +15,9 @@ export type SyncFeatureUpdate = SyncUpdate['featureUpdates'][number]
 export type FlowGraph = z.infer<typeof FlowGraphSchema>
 export type FlowNode = FlowGraph['nodes'][number]
 export type FlowEdge = FlowGraph['edges'][number]
+
+export type Connections = z.infer<typeof ConnectionsSchema>
+export type ConnectionType = Connections['connections'][number]['type']
 
 // --- Project management ---
 
@@ -172,6 +175,12 @@ export interface AnalysisStats {
   features: number
   scenarios: number
   files: number
+  /** Connection rows kept after the pipeline dropped invalid ones. */
+  connections: number
+  /** Self-links, unknown feature names and duplicate triples dropped at insert. */
+  connectionsSkipped: number
+  /** Flow graphs stored, one per top-level feature. */
+  flows: number
 }
 
 // --- Spec browsing (Task 9) ---
@@ -208,4 +217,38 @@ export interface FeatureDetail {
     description: string
   }
   groups: ScenarioGroupDTO[]
+}
+
+// --- Project map (Plan 2) ---
+
+/** One feature of the project map as served by GET /api/projects/:id/map. */
+export interface MapNode {
+  /** Node identity and the endpoint edges reference: the feature's row id. */
+  id: number
+  /** Same value as `id`, spelled out for feature-detail links from the UI. */
+  featureId: number
+  name: string
+  /** Scenarios attached to this feature itself; child scenarios stay theirs. */
+  scenarioCount: number
+  /** True when the feature hangs under a top-level feature. */
+  isChild: boolean
+}
+
+/**
+ * One edge between two features. Connections between the same pair collapse
+ * into a single edge; `from`/`to` are canonicalized (lower feature id first)
+ * and `types` carries every connection type between them, sorted.
+ */
+export interface MapEdge {
+  from: number
+  to: number
+  types: string[]
+}
+
+/** GET /api/projects/:id/map — the data behind the visualization page. */
+export interface MapData {
+  nodes: MapNode[]
+  edges: MapEdge[]
+  /** True when the project has no connections yet (pre-Plan-2 projects). */
+  empty: boolean
 }

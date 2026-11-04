@@ -1,0 +1,10 @@
+{
+  "connections": [
+    { "fromFeature": "Authentication", "toFeature": "Tasks", "type": "authenticates" },
+    { "fromFeature": "Authentication", "toFeature": "Tasks", "type": "shares_data" },
+    { "fromFeature": "Tasks", "toFeature": "Authentication", "type": "depends_on" },
+    { "fromFeature": "Login", "toFeature": "Task list", "type": "leads_to" },
+    { "fromFeature": "Tasks", "toFeature": "Tasks", "type": "triggers" },
+    { "fromFeature": "Notifications", "toFeature": "Tasks", "type": "notifies" }
+  ]
+}

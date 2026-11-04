@@ -1,11 +1,11 @@
 import { eq, inArray } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { analyses, annotations, featureFiles, features, projects, repositories, scenarios } from '../../server/db/schema'
+import { analyses, annotations, connections, featureFiles, features, flows, projects, repositories, scenarios } from '../../server/db/schema'
 import { runInitialAnalysis } from '../../server/services/analysis.service'
 import { featureSlug, filterCodeFiles } from '../../server/services/analysis/paths'
 import { GithubError, type GithubTreeEntry } from '../../server/services/github.service'
-import { CODE_FILE_COUNT, fakeDeps, TREE } from './helpers/analysis-fakes'
+import { CODE_FILE_COUNT, CONNECTIONS, FLOWS, fakeDeps, INVENTORY, SCENARIOS, TREE } from './helpers/analysis-fakes'
 
 /**
  * Pipeline tests run against a :memory: database with an injected fake github
@@ -68,7 +68,7 @@ describe('runInitialAnalysis', () => {
     expect(row?.step).toBe('done')
     expect(row?.error).toBeNull()
     expect(row?.finishedAt).not.toBeNull()
-    expect(JSON.parse(row?.statsJson ?? '{}')).toEqual({ features: 6, scenarios: 12, files: CODE_FILE_COUNT })
+    expect(JSON.parse(row?.statsJson ?? '{}')).toEqual({ features: 6, scenarios: 12, files: CODE_FILE_COUNT, connections: 4, connectionsSkipped: 2, flows: 2 })
 
     const featureRows = getDB().select().from(features).where(eq(features.projectId, projectId)).all()
     expect(featureRows.map((f) => f.name)).toEqual(['Authentication', 'Login', 'Logout', 'Tasks', 'Task list', 'Task lifecycle'])
@@ -124,6 +124,9 @@ describe('runInitialAnalysis', () => {
       'feature-inventory',
       'feature-scenarios:authentication',
       'feature-scenarios:tasks',
+      'connections',
+      'flow:authentication',
+      'flow:tasks',
     ])
 
     const inventoryPrompt = deps.llm.generateCalls[0]?.prompt ?? ''
@@ -135,6 +138,72 @@ describe('runInitialAnalysis', () => {
     expect(deps.github.getBlobCalls).toHaveLength(CODE_FILE_COUNT)
     expect(deps.github.getBlobCalls).toContain('sha-login')
     expect(deps.github.getBlobCalls).not.toContain('sha-lock')
+
+    // The flow prompt carries the stored scenario codes so nodes can reference them.
+    const flowPrompt = deps.llm.generateCalls.find((call) => call.name === 'flow:authentication')?.prompt ?? ''
+    expect(flowPrompt).toContain('HP-1')
+    expect(flowPrompt).toContain('ER-3')
+  })
+
+  test('stores the generated connections and per-feature flow graphs', async () => {
+    const { projectId, analysisId } = insertProjectWithRepo()
+
+    await runInitialAnalysis({ analysisId, projectId }, fakeDeps())
+
+    const featureRows = getDB().select().from(features).where(eq(features.projectId, projectId)).all()
+    const byName = new Map(featureRows.map((f) => [f.name, f]))
+
+    const connectionRows = getDB().select().from(connections).where(eq(connections.projectId, projectId)).all()
+    expect(connectionRows).toHaveLength(4)
+    const byType = new Map(connectionRows.map((row) => [row.type, row]))
+    expect(byType.get('authenticates')?.fromFeatureId).toBe(byName.get('Authentication')?.id)
+    expect(byType.get('authenticates')?.toFeatureId).toBe(byName.get('Tasks')?.id)
+    expect(byType.get('depends_on')?.fromFeatureId).toBe(byName.get('Tasks')?.id)
+    // Child features are valid endpoints too: Login → Task list.
+    expect(byType.get('leads_to')?.fromFeatureId).toBe(byName.get('Login')?.id)
+    expect(byType.get('leads_to')?.toFeatureId).toBe(byName.get('Task list')?.id)
+
+    const flowRows = getDB().select().from(flows).all()
+    expect(flowRows).toHaveLength(2)
+    const authFlow = flowRows.find((row) => row.featureId === byName.get('Authentication')?.id)
+    expect(JSON.parse(authFlow?.graphJson ?? '{}')).toEqual(FLOWS.authentication)
+  })
+
+  test('drops self-links, unknown features and duplicate triples, counting each skip', async () => {
+    const { projectId, analysisId } = insertProjectWithRepo()
+    const deps = fakeDeps({
+      responses: {
+        'feature-inventory': INVENTORY,
+        'feature-scenarios:authentication': SCENARIOS.authentication,
+        'feature-scenarios:tasks': SCENARIOS.tasks,
+        'connections': {
+          connections: [
+            ...CONNECTIONS.connections,
+            // Third (Authentication, Tasks, authenticates) — a duplicate triple.
+            { fromFeature: 'Authentication', toFeature: 'Tasks', type: 'authenticates' },
+          ],
+        },
+        'flow:authentication': FLOWS.authentication,
+        'flow:tasks': FLOWS.tasks,
+      },
+    })
+
+    await runInitialAnalysis({ analysisId, projectId }, deps)
+
+    expect(getDB().select().from(connections).where(eq(connections.projectId, projectId)).all()).toHaveLength(4)
+    const row = getDB().select().from(analyses).where(eq(analyses.id, analysisId)).get()
+    // 2 fixture skips (self-link + unknown name) + 1 duplicate = 3.
+    expect(JSON.parse(row?.statsJson ?? '{}')).toMatchObject({ connections: 4, connectionsSkipped: 3 })
+  })
+
+  test('a re-analysis wipes the previous connections and flows instead of doubling them', async () => {
+    const { projectId, analysisId } = insertProjectWithRepo()
+
+    await runInitialAnalysis({ analysisId, projectId }, fakeDeps())
+    await runInitialAnalysis({ analysisId, projectId }, fakeDeps())
+
+    expect(getDB().select().from(connections).where(eq(connections.projectId, projectId)).all()).toHaveLength(4)
+    expect(getDB().select().from(flows).all()).toHaveLength(2)
   })
 
   test('sets repositories.lastSyncedSha to the branch head', async () => {
@@ -314,7 +383,7 @@ describe('runInitialAnalysis', () => {
 
     // The file still counts as scanned, but its content never reaches the prompt.
     const row = getDB().select().from(analyses).where(eq(analyses.id, analysisId)).get()
-    expect(JSON.parse(row?.statsJson ?? '{}')).toEqual({ features: 6, scenarios: 12, files: CODE_FILE_COUNT + 1 })
+    expect(JSON.parse(row?.statsJson ?? '{}')).toEqual({ features: 6, scenarios: 12, files: CODE_FILE_COUNT + 1, connections: 4, connectionsSkipped: 2, flows: 2 })
     const inventoryPrompt = deps.llm.generateCalls[0]?.prompt ?? ''
     expect(inventoryPrompt).not.toContain('--- src/generated/huge.ts ---')
     expect(inventoryPrompt).not.toContain('xxxxxxxxxx')

@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 import { GithubError, type GithubCommitInfo, type GithubComparison, type GithubService, type GithubTreeEntry } from '../../../server/services/github.service'
 import type { LlmClient } from '../../../server/services/llm.service'
-import type { FeatureInventorySchema, FeatureScenariosSchema } from '../../../shared/schemas'
+import type { ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema } from '../../../shared/schemas'
 
 /**
  * Shared in-memory fixtures and fake clients for the pipeline services
@@ -114,6 +114,78 @@ export const SCENARIOS: Record<string, z.infer<typeof FeatureScenariosSchema>> =
   },
 }
 
+/**
+ * Same content as fixtures/llm/connections.json: the four resolvable relations
+ * the map draws, plus one self-link ("Tasks → Tasks") and one unknown feature
+ * ("Notifications") so the pipeline's skip paths run for real on every test.
+ */
+export const CONNECTIONS: z.infer<typeof ConnectionsSchema> = {
+  connections: [
+    { fromFeature: 'Authentication', toFeature: 'Tasks', type: 'authenticates' },
+    { fromFeature: 'Authentication', toFeature: 'Tasks', type: 'shares_data' },
+    { fromFeature: 'Tasks', toFeature: 'Authentication', type: 'depends_on' },
+    { fromFeature: 'Login', toFeature: 'Task list', type: 'leads_to' },
+    { fromFeature: 'Tasks', toFeature: 'Tasks', type: 'triggers' },
+    { fromFeature: 'Notifications', toFeature: 'Tasks', type: 'notifies' },
+  ],
+}
+
+/** Same content as fixtures/llm/flow.{authentication,tasks}.json. */
+export const FLOWS: Record<'authentication' | 'tasks', z.infer<typeof FlowGraphSchema>> = {
+  authentication: {
+    nodes: [
+      { id: 'start', kind: 'start', label: 'User opens the login page' },
+      { id: 'submit', kind: 'step', label: 'Submit email and password', scenarioCode: 'HP-1' },
+      { id: 'credentials', kind: 'decision', label: 'Valid credentials?' },
+      { id: 'invalid', kind: 'error', label: "Show 'Invalid email or password'", scenarioCode: 'ER-2' },
+      { id: 'protected', kind: 'step', label: 'Open a protected page', scenarioCode: 'ED-1' },
+      { id: 'cookie', kind: 'decision', label: 'Session cookie accepted?' },
+      { id: 'foreign-cookie', kind: 'error', label: 'Redirect to the login page', scenarioCode: 'ER-3' },
+      { id: 'logout', kind: 'step', label: 'Log out', scenarioCode: 'HP-2' },
+      { id: 'end', kind: 'end', label: 'Back on the login page' },
+    ],
+    edges: [
+      { from: 'start', to: 'submit' },
+      { from: 'submit', to: 'credentials' },
+      { from: 'credentials', to: 'protected', label: 'yes' },
+      { from: 'credentials', to: 'invalid', label: 'no' },
+      { from: 'invalid', to: 'submit', label: 'retry' },
+      { from: 'protected', to: 'cookie' },
+      { from: 'cookie', to: 'logout', label: 'yes' },
+      { from: 'cookie', to: 'foreign-cookie', label: 'no' },
+      { from: 'foreign-cookie', to: 'end' },
+      { from: 'logout', to: 'end' },
+    ],
+  },
+  tasks: {
+    nodes: [
+      { id: 'start', kind: 'start', label: 'User opens the task list' },
+      { id: 'browse', kind: 'step', label: 'Browse tasks grouped by due date', scenarioCode: 'ED-1' },
+      { id: 'new-task', kind: 'step', label: 'Type a title and pick a due date', scenarioCode: 'HP-1' },
+      { id: 'limit', kind: 'decision', label: 'Task limit reached?' },
+      { id: 'blocked', kind: 'error', label: 'Create button stays disabled', scenarioCode: 'ER-1' },
+      { id: 'created', kind: 'step', label: 'Task appears under its due date' },
+      { id: 'complete', kind: 'step', label: "Check the task's checkbox", scenarioCode: 'HP-2' },
+      { id: 'stale', kind: 'error', label: "Show 'Task no longer exists'", scenarioCode: 'ER-2' },
+      { id: 'reopen', kind: 'step', label: 'Uncheck the completed task', scenarioCode: 'HP-3' },
+      { id: 'end', kind: 'end', label: 'Task list reflects the changes' },
+    ],
+    edges: [
+      { from: 'start', to: 'browse' },
+      { from: 'browse', to: 'new-task' },
+      { from: 'new-task', to: 'limit' },
+      { from: 'limit', to: 'created', label: 'no' },
+      { from: 'limit', to: 'blocked', label: 'yes' },
+      { from: 'blocked', to: 'new-task', label: 'edit title' },
+      { from: 'created', to: 'complete' },
+      { from: 'complete', to: 'stale', label: 'already deleted' },
+      { from: 'complete', to: 'reopen', label: 'undo' },
+      { from: 'stale', to: 'end' },
+      { from: 'reopen', to: 'end' },
+    ],
+  },
+}
+
 export interface FakeGithub extends GithubService {
   /** Blob reads the pipeline issued, in call order. */
   getBlobCalls: string[]
@@ -199,6 +271,9 @@ export function fakeDeps(options: FakeDepsOptions = {}): { github: FakeGithub, l
       'feature-inventory': INVENTORY,
       'feature-scenarios:authentication': SCENARIOS.authentication,
       'feature-scenarios:tasks': SCENARIOS.tasks,
+      'connections': CONNECTIONS,
+      'flow:authentication': FLOWS.authentication,
+      'flow:tasks': FLOWS.tasks,
     }),
   }
 }

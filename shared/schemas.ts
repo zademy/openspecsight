@@ -95,6 +95,30 @@ export const FlowGraphSchema = z.object({
 })
 
 /**
+ * Feature-to-feature relations shown on the product map. SQLite has no enum
+ * type, so the 9 kinds live here — shared so the DB column enum and the LLM
+ * output schema can never drift apart.
+ */
+export const connectionTypes = ['leads_to', 'triggers', 'depends_on', 'shares_data', 'authenticates', 'notifies', 'configures', 'embeds_in', 'competes_with'] as const
+
+export const ConnectionTypeSchema = z.enum(connectionTypes)
+
+/**
+ * Feature-to-feature relations as produced by the analysis. Names reference
+ * the inventory's features; the pipeline drops unknown names, self-links and
+ * duplicate triples before storing, so the schema itself stays lenient.
+ */
+export const ConnectionsSchema = z.object({
+  connections: z.array(
+    z.object({
+      fromFeature: z.string(),
+      toFeature: z.string(),
+      type: ConnectionTypeSchema,
+    }),
+  ),
+})
+
+/**
  * Payload of POST /api/projects: a project together with its first
  * repository. Empty optional fields (untouched form inputs) normalize to
  * undefined; the server validates the repository against GitHub and defaults

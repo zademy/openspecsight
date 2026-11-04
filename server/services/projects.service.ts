@@ -3,8 +3,10 @@ import { getDB } from '../db/client'
 import {
   analyses,
   annotations,
+  connections,
   featureFiles,
   features,
+  flows,
   projects,
   repositories,
   releases,
@@ -210,6 +212,11 @@ export function deleteProject(id: number): boolean {
         tx.delete(scenarios).where(inArray(scenarios.id, scenarioIds)).run()
       }
       tx.delete(featureFiles).where(inArray(featureFiles.featureId, featureIds)).run()
+      // The map tables reference features by foreign key — clear them before
+      // the feature rows die. Pre-Plan-2 projects carry neither, so these
+      // deletes are no-ops there.
+      tx.delete(connections).where(eq(connections.projectId, id)).run()
+      tx.delete(flows).where(inArray(flows.featureId, featureIds)).run()
       tx.delete(features).where(eq(features.projectId, id)).run()
     }
     tx.delete(repositories).where(eq(repositories.projectId, id)).run()
