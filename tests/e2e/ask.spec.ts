@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import type { AnalysisProgress } from '../../shared/types'
-import { askFromOverview, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
+import { askFromOverview, deleteScriptedAnswer, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
 import { login } from './helpers/login'
 
 /**
@@ -9,26 +9,34 @@ import { login } from './helpers/login'
  * the grounded answer with citation chips; a chip jumps to the anchored
  * scenario row in the spec, a follow-up appends in the same conversation,
  * and a gibberish question renders the honest refusal without chips. The
- * mock LLM's answer is written to the build output's fixture folder with
- * the live scenario id, so grounding stays real end to end. The project is
- * deleted afterwards, which now also cascades its conversations away.
+ * mock LLM's answer is written to a per-project fixture file with the
+ * live scenario id, so grounding stays real end to end even fully
+ * parallel. The project is deleted afterwards, which now also cascades
+ * its conversations away.
  */
 
-const PROJECT_NAME = 'Ask Fixture'
+/**
+ * Repeats run concurrently under --repeat-each: the repeat index keeps the
+ * fixture project (and its per-project ask fixture) unique per copy.
+ */
+const projectName = (): string => `Ask Fixture ${test.info().repeatEachIndex}`
 
-async function deleteProjectsByName(page: Page, name: string): Promise<void> {
+/** Deletes every project with the name and returns their ids (fixture cleanup follows them). */
+async function deleteProjectsByName(page: Page, name: string): Promise<number[]> {
   const response = await page.request.get('/api/projects')
   const projects = (await response.json()) as Array<{ id: number, name: string }>
-  for (const stale of projects.filter((p) => p.name === name)) {
-    await page.request.delete(`/api/projects/${stale.id}`)
+  const stale = projects.filter((p) => p.name === name)
+  for (const project of stale) {
+    await page.request.delete(`/api/projects/${project.id}`)
   }
+  return stale.map((project) => project.id)
 }
 
 /** Creates the project and runs its initial analysis to a terminal `done`. */
 async function createAnalyzedProject(page: Page): Promise<number> {
-  await deleteProjectsByName(page, PROJECT_NAME)
+  await deleteProjectsByName(page, projectName())
   const create = await page.request.post('/api/projects', {
-    data: { name: PROJECT_NAME, description: 'Exercises the ask UI', owner: 'acme', repo: 'tasks' },
+    data: { name: projectName(), description: 'Exercises the ask UI', owner: 'acme', repo: 'tasks' },
   })
   expect(create.status()).toBe(201)
   const projectId = ((await create.json()) as { id: number }).id
@@ -49,7 +57,7 @@ test.describe('ask', () => {
     await login(page)
     const projectId = await createAnalyzedProject(page)
     const scenario = await wrongPasswordScenario(page, projectId)
-    scriptLlmAnswer(scenario.id)
+    scriptLlmAnswer(projectId, scenario.id)
 
     const QUESTION = 'What happens with a wrong password?'
     try {
@@ -88,7 +96,7 @@ test.describe('ask', () => {
 
       // A gibberish question gets the honest refusal: copy, no chips, and a
       // quiet way back to the spec.
-      scriptLlmAnswer(null)
+      scriptLlmAnswer(projectId, null)
       await askFromOverview(page, projectId, 'How does the flux capacitor work?')
       await expect(page.getByText('The spec has nothing about time travel.')).toBeVisible()
       await expect(page.getByRole('link', { name: /Citation \d:/ })).toHaveCount(0)
@@ -103,8 +111,9 @@ test.describe('ask', () => {
       await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/ask$`))
       await expect(page.getByRole('navigation', { name: 'Conversations' }).getByText(QUESTION)).toHaveCount(0)
     } finally {
-      scriptLlmAnswer(scenario.id)
-      await deleteProjectsByName(page, PROJECT_NAME)
+      for (const id of await deleteProjectsByName(page, projectName())) {
+        deleteScriptedAnswer(id)
+      }
     }
   })
 })

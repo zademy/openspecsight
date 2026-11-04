@@ -43,7 +43,9 @@ export async function ask(projectId: number, question: string, deps: AskDeps = {
   }
 
   const llm = deps.llm ?? createLlmClient()
-  const raw = await llm.generate('ask-answer', AskAnswerSchema, buildAskPrompt(trimmed, hits))
+  // The projectId hint scopes the mock fixture (ask-answer-<id>.json) per project,
+  // so concurrent ask tests cannot script over each other; real mode ignores it.
+  const raw = await llm.generate('ask-answer', AskAnswerSchema, buildAskPrompt(trimmed, hits), { projectId })
   if (!raw.covered) {
     return { answer: raw.answer, refused: true, citations: [] }
   }
@@ -54,10 +56,11 @@ export async function ask(projectId: number, question: string, deps: AskDeps = {
 
 /**
  * Prompt for the ask step: the retrieved scenarios numbered 1..N with their
- * live scenario ids (the numbering is what citation `index` values reference;
- * the ids are what citation `scenarioId` must carry — without them a real
- * model can only ground by coincidence), the question, and the grounding
- * instructions — answer only from these scenarios, cite with [n] and the
+ * live scenario ids (the numbering is what citation `index` values reference,
+ * and the ids are what citation `scenarioId` must carry, without which a
+ * real model can only ground by coincidence), the question, and the
+ * grounding instructions: answer only from these scenarios, cite with [n]
+ * and the shown id, bow out with covered:false when they do not cover it.
  * shown id, bow out with covered:false when they do not cover it.
  */
 function buildAskPrompt(question: string, hits: ScenarioSearchHit[]): string {

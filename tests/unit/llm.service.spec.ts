@@ -4,7 +4,7 @@ import type { LanguageModel } from 'ai'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ZodError } from 'zod'
 import { createLlmClient, readLlmEnv } from '../../server/services/llm.service'
-import { FeatureInventorySchema, FeatureScenariosSchema } from '../../shared/schemas'
+import { AskAnswerSchema, FeatureInventorySchema, FeatureScenariosSchema } from '../../shared/schemas'
 import type { FeatureInventory } from '../../shared/types'
 
 /**
@@ -92,6 +92,40 @@ describe('mock mode (LLM_MOCK=true)', () => {
       createLlmClient().generate('../secrets', FeatureInventorySchema, 'ignored'),
     ).rejects.toThrow(/Invalid LLM fixture name/)
   })
+
+  test('resolves the per-project variant when a projectId is given and the file exists', async () => {
+    process.env.LLM_MOCK = 'true'
+    const readFixture = vi.fn(async (filename: string) => ({ covered: true, answer: `from ${filename}`, citations: [] }))
+    const hasFixture = vi.fn((filename: string) => filename === 'ask-answer-42.json')
+    const client = createLlmClient({ readFixture, hasFixture })
+
+    const result = await client.generate('ask-answer', AskAnswerSchema, 'ignored', { projectId: 42 })
+
+    expect(result.answer).toBe('from ask-answer-42.json')
+    expect(readFixture.mock.calls[0]?.[0]).toBe('ask-answer-42.json')
+  })
+
+  test('falls back to the base fixture when the per-project variant does not exist', async () => {
+    process.env.LLM_MOCK = 'true'
+    const readFixture = vi.fn(async (filename: string) => ({ covered: true, answer: `from ${filename}`, citations: [] }))
+    const hasFixture = vi.fn(() => false)
+    const client = createLlmClient({ readFixture, hasFixture })
+
+    const result = await client.generate('ask-answer', AskAnswerSchema, 'ignored', { projectId: 42 })
+
+    expect(result.answer).toBe('from ask-answer.json')
+    expect(readFixture.mock.calls[0]?.[0]).toBe('ask-answer.json')
+  })
+
+  test('a generate call without opts keeps the base fixture name (backward compat)', async () => {
+    process.env.LLM_MOCK = 'true'
+    const readFixture = vi.fn(async () => ({ features: [] }))
+    const client = createLlmClient({ readFixture })
+
+    await client.generate('feature-inventory', FeatureInventorySchema, 'ignored')
+
+    expect(readFixture.mock.calls[0]?.[0]).toBe('feature-inventory.json')
+  })
 })
 
 describe('real mode (LLM_MOCK=false)', () => {
@@ -155,6 +189,20 @@ describe('real mode (LLM_MOCK=false)', () => {
     expect(generate).toHaveBeenCalledOnce()
     expect(generate.mock.calls[0]?.[0]?.model).toBe(model)
     expect(generate.mock.calls[0]?.[0]?.schema).toBe(FeatureInventorySchema)
+    expect(generate.mock.calls[0]?.[0]?.prompt).toBe('inventory prompt')
+  })
+
+  test('accepts and ignores the per-project opts', async () => {
+    process.env.LLM_MOCK = 'false'
+    process.env.LLM_API_STYLE = 'anthropic'
+    const model = offlineModel()
+    const createModel = vi.fn(() => model)
+    const generate = vi.fn(async () => inventoryPayload)
+    const client = createLlmClient({ createModel, generate })
+
+    const result = await client.generate('feature-inventory', FeatureInventorySchema, 'inventory prompt', { projectId: 42 })
+
+    expect(result).toEqual(inventoryPayload)
     expect(generate.mock.calls[0]?.[0]?.prompt).toBe('inventory prompt')
   })
 })

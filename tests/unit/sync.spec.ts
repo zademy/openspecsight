@@ -4,6 +4,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
 import { analyses, annotations, connections, features, flows, jobs, projects, releases, repositories, scenarioRevisions, scenarios } from '../../server/db/schema'
+import { connectionTypes } from '../../shared/schemas'
 import { runInitialAnalysis } from '../../server/services/analysis.service'
 import { enqueueJob } from '../../server/services/jobs.service'
 import { runSync, startSync, SyncInProgressError } from '../../server/services/sync.service'
@@ -271,8 +272,9 @@ describe('runSync', () => {
       const prompt = deps.llm.generateCalls[0]!.prompt
       expect(prompt).toContain('connections')
       expect(prompt).toContain('flow')
-      expect(prompt).toContain('leads_to')
-      expect(prompt).toContain('authenticates')
+      for (const type of connectionTypes) {
+        expect(prompt, `connection type ${type} must be named in the sync prompt`).toContain(type)
+      }
     })
   })
 

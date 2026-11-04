@@ -47,6 +47,10 @@ test.describe('projects', () => {
     // The card leads to the project overview with repo info and rail nav.
     await card.click()
     await expect(page).toHaveURL(/\/projects\/\d+$/)
+    // The URL flips before the list DOM swaps, and a parallel worker's
+    // card shows acme/tasks too; hold for the overview's own heading
+    // first so the repo assert resolves to exactly the overview's item.
+    await expect(page.getByRole('heading', { name: 'Task Manager', level: 1 })).toBeVisible()
     await expect(page.getByText('acme/tasks', { exact: true })).toBeVisible()
     await expect(page.getByText('main', { exact: true })).toBeVisible()
     for (const railItem of ['Overview', 'Changes', 'Product spec']) {

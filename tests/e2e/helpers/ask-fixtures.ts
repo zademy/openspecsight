@@ -1,15 +1,16 @@
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { expect, type Page } from '@playwright/test'
 import type { FeatureDetail, FeatureNode } from '../../../shared/types'
 
 /**
- * The mock LLM re-reads its fixture file on every generate call, so a test
- * can re-script the model between asks without touching the server: write
- * the answer with a scenario id captured from the live database and the
- * citation round trip stays real end to end. Script right before asking —
- * every parallel worker shares the file, so a stale script can ground
- * another test's ask against the wrong project's rows.
+ * The mock LLM re-reads its fixture file on every generate call and resolves
+ * a per-project file first, so each test scripts its own
+ * `ask-answer-<projectId>.json` and no parallel worker's ask can read it
+ * (the shared single-file race is gone). Write the answer with a scenario id
+ * captured from the live database and the citation round trip stays real end
+ * to end. Script right before asking, and delete the file in cleanup so a
+ * later project that reuses the id cannot inherit the script.
  */
 
 /**
@@ -18,8 +19,8 @@ import type { FeatureDetail, FeatureNode } from '../../../shared/types'
  * with cwd = .output). Fall back to the project-root layout for other
  * runners.
  */
-function llmFixturePath(): string {
-  for (const candidate of [path.resolve(process.cwd(), '.output', 'fixtures', 'llm', 'ask-answer.json'), path.resolve(process.cwd(), 'fixtures', 'llm', 'ask-answer.json')]) {
+function llmFixtureDir(): string {
+  for (const candidate of [path.resolve(process.cwd(), '.output', 'fixtures', 'llm'), path.resolve(process.cwd(), 'fixtures', 'llm')]) {
     if (existsSync(candidate)) {
       return candidate
     }
@@ -27,7 +28,11 @@ function llmFixturePath(): string {
   throw new Error('LLM fixture folder not found (expected .output/fixtures/llm or fixtures/llm)')
 }
 
-export function scriptLlmAnswer(scenarioId: number | null): void {
+function scriptedAnswerPath(projectId: number): string {
+  return path.join(llmFixtureDir(), `ask-answer-${projectId}.json`)
+}
+
+export function scriptLlmAnswer(projectId: number, scenarioId: number | null): void {
   const fixture = scenarioId === null
     ? { covered: false, answer: 'The spec has nothing about time travel.', citations: [] }
     : {
@@ -35,7 +40,15 @@ export function scriptLlmAnswer(scenarioId: number | null): void {
         answer: "Submitting the login form with the wrong password shows 'Invalid email or password' [1] and no cookie is set.",
         citations: [{ index: 1, scenarioId, quote: "the form shows 'Invalid email or password' and no cookie is set" }],
       }
-  writeFileSync(llmFixturePath(), `${JSON.stringify(fixture, null, 2)}\n`)
+  writeFileSync(scriptedAnswerPath(projectId), `${JSON.stringify(fixture, null, 2)}\n`)
+}
+
+/** Removes a project's scripted answer so id reuse cannot inherit it. */
+export function deleteScriptedAnswer(projectId: number): void {
+  const file = scriptedAnswerPath(projectId)
+  if (existsSync(file)) {
+    unlinkSync(file)
+  }
 }
 
 /** The wrong-password scenario's live id and code, read from the spec API. */

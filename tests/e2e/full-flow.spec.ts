@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Response } from '@playwright/test'
 import type { FeatureNode } from '../../shared/types'
-import { askFromOverview, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
+import { askFromOverview, deleteScriptedAnswer, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
 
 /**
  * The whole product in one pass, exactly as a fresh operator drives it: log
@@ -8,8 +8,8 @@ import { askFromOverview, scriptLlmAnswer, wrongPasswordScenario } from './helpe
  * with its own stub state, so parallel workers cannot flip our commits),
  * run the analysis and watch the progress land on stats, browse the spec,
  * edit a scenario by hand, sync after the stub serves a new commit, follow
- * the release back into the spec, read the refreshed maps — the flow
- * diagram renders the sync fixture's new "Account locked" node — and ask
+ * the release back into the spec, read the refreshed maps (the flow
+ * diagram renders the sync fixture's new "Account locked" node) and ask
  * from the overview, following the citation chip to the wrong-password
  * row. Two hard rulings ride along (plan Review Focus #2/#3):
  * - the manually edited scenario must keep the exact text the user wrote
@@ -22,7 +22,11 @@ import { askFromOverview, scriptLlmAnswer, wrongPasswordScenario } from './helpe
  *   session secret, and no JSON payload may carry a `pat` key.
  */
 const STUB_ADMIN = 'http://127.0.0.1:9876/_admin/state'
-const PROJECT_NAME = 'Full-Flow Fixture'
+/**
+ * Repeats run concurrently under --repeat-each: the repeat index keeps the
+ * fixture project (and its per-project ask fixture) unique per copy.
+ */
+const projectName = (): string => `Full-Flow Fixture ${test.info().repeatEachIndex}`
 const STUB_REPO = 'acme/flow'
 const EDITED_ACTION = 'sign in from the CLI with a long-lived device token'
 const EDITED_OUTCOME = 'the CLI keeps a session token that survives a server restart'
@@ -48,12 +52,15 @@ async function login(page: Page): Promise<void> {
   await expect(page).toHaveURL('http://localhost:3000/')
 }
 
-async function deleteProjectsByName(page: Page, name: string): Promise<void> {
+/** Deletes every project with the name and returns their ids (fixture cleanup follows them). */
+async function deleteProjectsByName(page: Page, name: string): Promise<number[]> {
   const response = await page.request.get('/api/projects')
   const projects = (await response.json()) as Array<{ id: number, name: string }>
-  for (const stale of projects.filter((project) => project.name === name)) {
-    await page.request.delete(`/api/projects/${stale.id}`)
+  const stale = projects.filter((project) => project.name === name)
+  for (const project of stale) {
+    await page.request.delete(`/api/projects/${project.id}`)
   }
+  return stale.map((project) => project.id)
 }
 
 async function setStubState(page: Page, state: 'initial' | 'after-auth-commit'): Promise<void> {
@@ -122,13 +129,15 @@ test('full flow: connect, analyze, edit, sync, and the manual edit survives', as
   await login(page)
 
   // A previous run may have died before cleanup; start from a clean slate.
-  await deleteProjectsByName(page, PROJECT_NAME)
+  await deleteProjectsByName(page, projectName())
   await setStubState(page, 'initial')
 
   try {
     await runFullFlow(page, leaks)
   } finally {
-    await deleteProjectsByName(page, PROJECT_NAME)
+    for (const id of await deleteProjectsByName(page, projectName())) {
+      deleteScriptedAnswer(id)
+    }
     await setStubState(page, 'initial')
   }
 })
@@ -137,11 +146,11 @@ test('full flow: connect, analyze, edit, sync, and the manual edit survives', as
 async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   // Connect the repository through the create dialog, as the operator would.
   await page.getByRole('button', { name: 'New project' }).click()
-  await page.getByLabel('Name').fill(PROJECT_NAME)
+  await page.getByLabel('Name').fill(projectName())
   await page.getByLabel('Owner').fill('acme')
   await page.getByLabel('Repository').fill('flow')
   await page.getByRole('button', { name: 'Create project' }).click()
-  await page.getByRole('link', { name: new RegExp(PROJECT_NAME) }).click()
+  await page.getByRole('link', { name: new RegExp(projectName()) }).click()
   await expect(page).toHaveURL(/\/projects\/\d+$/)
   const projectId = Number(/\/projects\/(\d+)$/.exec(page.url())?.[1])
   expect(projectId, 'the project id from the overview URL').toBeGreaterThan(0)
@@ -246,7 +255,9 @@ async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   // scenario id (the shared ask.spec helper): the grounded answer renders
   // with a citation chip, and the chip lands on the anchored scenario row.
   const scenario = await wrongPasswordScenario(page, projectId)
-  scriptLlmAnswer(scenario.id)
+  // The per-project fixture file (ask-answer-<projectId>.json) means this
+  // script cannot collide with ask.spec's, even when both run at once.
+  scriptLlmAnswer(projectId, scenario.id)
   await askFromOverview(page, projectId, 'What happens with a wrong password?')
   await expect(page.getByRole('heading', { name: 'What happens with a wrong password?', level: 3 })).toBeVisible()
   await expect(page.getByText("shows 'Invalid email or password'", { exact: false })).toBeVisible()

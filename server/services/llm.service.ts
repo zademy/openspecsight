@@ -9,11 +9,14 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { z } from 'zod'
 
 /**
- * Structured-output LLM client. `generate(name, schema, prompt)` returns a
- * value validated against the zod schema:
+ * Structured-output LLM client. `generate(name, schema, prompt, opts?)`
+ * returns a value validated against the zod schema:
  * - Mock mode (`LLM_MOCK=true`) returns the fixture `fixtures/llm/<name>.json`
  *   (a `:` in `name` becomes a `.`, so `'sync-update:authentication'` reads
  *   `sync-update.authentication.json`), validated against the same schema.
+ *   With `opts.projectId` it resolves `<name>-<projectId>.json` first and
+ *   falls back to the base fixture when that file does not exist, so ask
+ *   tests script answers per project instead of racing on one shared file.
  * - Real mode builds a provider from `LLM_API_STYLE`/`LLM_BASE_URL`/`LLM_API_KEY`
  *   and runs AI SDK `generateObject` with `LLM_MODEL`.
  *
@@ -22,7 +25,15 @@ import type { z } from 'zod'
  * run in mock mode and inject `createModel`/`generate` in real mode.
  */
 export interface LlmClient {
-  generate<T>(name: string, schema: z.ZodType<T>, prompt: string): Promise<T>
+  generate<T>(name: string, schema: z.ZodType<T>, prompt: string, opts?: GenerateOpts): Promise<T>
+}
+
+/**
+ * Optional per-call hints. Mock mode uses `projectId` to resolve the
+ * per-project fixture variant first; real mode ignores the hints.
+ */
+export interface GenerateOpts {
+  readonly projectId?: number
 }
 
 /** Resolved LLM configuration handed to the provider factory. */
@@ -45,6 +56,8 @@ export interface LlmClientDeps {
   generate?: (args: { model: LanguageModel, schema: z.ZodType, prompt: string }) => Promise<unknown>
   /** Mock mode: load the raw fixture JSON for a fixture file name. */
   readFixture?: (filename: string) => Promise<unknown>
+  /** Mock mode: whether a fixture file exists (per-project variant lookup). */
+  hasFixture?: (filename: string) => boolean
 }
 
 const DEFAULT_API_STYLE = 'anthropic'
@@ -70,9 +83,12 @@ export function createLlmClient(deps: LlmClientDeps = {}): LlmClient {
 
   if (env.mock) {
     const readFixture = deps.readFixture ?? readFixtureFromDisk
+    const hasFixture = deps.hasFixture ?? hasFixtureOnDisk
     return {
-      async generate<T>(name: string, schema: z.ZodType<T>): Promise<T> {
-        const raw = await readFixture(fixtureFileName(name))
+      async generate<T>(name: string, schema: z.ZodType<T>, _prompt: string, opts?: GenerateOpts): Promise<T> {
+        const base = fixtureFileName(name)
+        const variant = opts?.projectId === undefined ? base : variantFileName(base, opts.projectId)
+        const raw = await readFixture(variant !== base && hasFixture(variant) ? variant : base)
         return schema.parse(raw)
       },
     }
@@ -95,6 +111,15 @@ function fixtureFileName(name: string): string {
     throw new Error(`Invalid LLM fixture name: ${name}`)
   }
   return `${name.replaceAll(':', '.')}.json`
+}
+
+/** Appends the per-project suffix: `ask-answer.json` + 42 → `ask-answer-42.json`. */
+function variantFileName(filename: string, projectId: number): string {
+  return `${filename.replace(/\.json$/, '')}-${projectId}.json`
+}
+
+function hasFixtureOnDisk(filename: string): boolean {
+  return existsSync(join(resolveFixturesDir(), filename))
 }
 
 async function readFixtureFromDisk(filename: string): Promise<unknown> {
