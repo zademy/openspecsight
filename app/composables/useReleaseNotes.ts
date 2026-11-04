@@ -1,4 +1,4 @@
-import type { CreateReleaseNoteInput, PublishResult, ReleaseNoteDetail, ReleaseNoteSummary } from '#shared/types'
+import type { ContentBlock, CreateReleaseNoteInput, PublishResult, ReleaseNoteDetail, ReleaseNoteSummary, UpdateReleaseNoteInput } from '#shared/types'
 
 /**
  * Release-note data for the notes pages: thin $fetch wrappers over the
@@ -33,5 +33,20 @@ export function useReleaseNotes() {
     return $fetch<PublishResult>(`/api/release-notes/${noteId}/unpublish`, { method: 'POST' })
   }
 
-  return { list, get, create, publish, unpublish }
+  /**
+   * Autosave write: stores exactly the fields sent, so a title-only save
+   * never touches the blocks array (which is last-write-wins per whole
+   * array — the contract is documented on the service).
+   */
+  function update(noteId: number | string, patch: UpdateReleaseNoteInput): Promise<ReleaseNoteDetail> {
+    return $fetch<ReleaseNoteDetail>(`/api/release-notes/${noteId}`, { method: 'PATCH', body: patch })
+  }
+
+  /** Rewrites one paragraph block in the note's voice; answers that block. */
+  function enhance(noteId: number | string, index: number, instruction?: string): Promise<{ block: ContentBlock }> {
+    return $fetch<{ block: ContentBlock }>(`/api/release-notes/${noteId}/blocks/${index}/enhance`, { method: 'POST', body: { instruction } })
+  }
+
+  return { list, get, create, publish, unpublish, update, enhance }
+
 }

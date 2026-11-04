@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateDigestSchema, CreateProjectSchema, CreateReleaseNoteSchema, CreateScenarioSchema, CreateVoiceSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SendDigestSchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateDigestSchema, CreateProjectSchema, CreateReleaseNoteSchema, CreateScenarioSchema, CreateVoiceSchema, ConnectionsSchema, DigestDraftSchema, EnhanceBlockSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SendDigestSchema, SyncUpdateSchema, UpdateReleaseNoteSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -397,6 +397,12 @@ export interface Voice {
 
 /** Payload of POST /api/projects/:id/release-notes. */
 export type CreateReleaseNoteInput = z.infer<typeof CreateReleaseNoteSchema>
+
+/** Payload of PATCH /api/release-notes/:id: exactly the fields being saved. */
+export type UpdateReleaseNoteInput = z.infer<typeof UpdateReleaseNoteSchema>
+
+/** Payload of POST /api/release-notes/:id/blocks/:index/enhance. */
+export type EnhanceBlockInput = z.infer<typeof EnhanceBlockSchema>
 
 /** GET /api/projects/:id/release-notes — one drafted note, newest first. */
 export interface ReleaseNoteSummary {

@@ -275,3 +275,25 @@ export const CreateReleaseNoteSchema = z.object({
   (input) => input.rangeFrom === undefined || input.rangeTo === undefined || input.rangeFrom <= input.rangeTo,
   { message: 'rangeFrom must not be after rangeTo' },
 )
+
+/**
+ * Payload of PATCH /api/release-notes/:id: any subset of the editable
+ * fields. The autosave stores exactly what was sent — a title-only save
+ * must not touch the blocks array, and the other way around — so at
+ * least one field is required and an empty {} must not masquerade as an
+ * edit.
+ */
+export const UpdateReleaseNoteSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(200).optional(),
+  blocks: ContentBlocksSchema.optional(),
+}).refine(
+  (patch) => patch.title !== undefined || patch.blocks !== undefined,
+  { message: 'Give a title, blocks, or both' },
+)
+
+/** Payload of POST /api/release-notes/:id/blocks/:index/enhance. */
+export const EnhanceBlockSchema = z.object({
+  instruction: z.string().trim().max(2000, 'Keep the instruction under 2000 characters')
+    .optional()
+    .transform((instruction) => instruction === '' ? undefined : instruction),
+})

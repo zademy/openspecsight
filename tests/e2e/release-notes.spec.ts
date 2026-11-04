@@ -13,6 +13,8 @@ import { login } from './helpers/login'
  */
 const STUB_ADMIN = 'http://127.0.0.1:9876/_admin/state'
 const UI_REPO = 'acme/notes'
+// The editor spec flips commit state too, so it owns another alias.
+const EDITOR_REPO = 'acme/notes-editor'
 
 async function setStubState(page: Page, repo: string, state: 'initial' | 'after-auth-commit'): Promise<void> {
   const response = await page.request.post(STUB_ADMIN, { data: { repo, state } })
@@ -67,6 +69,13 @@ async function loggedOutPage(page: Page): Promise<Page> {
   return (await context).newPage()
 }
 
+/** The id of the release a sync produced (the list API groups by day). */
+async function firstReleaseId(page: Page, projectId: number): Promise<number> {
+  const response = await page.request.get(`/api/projects/${projectId}/releases`)
+  const days = (await response.json()) as Array<{ releases: Array<{ id: number }> }>
+  return days[0]!.releases[0]!.id
+}
+
 test.describe('release notes', () => {
   test('draft from the synced release, publish, read logged out, unpublish', async ({ page }) => {
     test.setTimeout(120_000)
@@ -108,11 +117,11 @@ test.describe('release notes', () => {
       expect(draftResponse!.status()).toBe(404)
       await anonBefore.context().close()
 
-      // The read-only draft view: blocks, voice line, publish action.
+      // The draft view is the block editor: editable title and blocks.
       await page.getByRole('link', { name: 'Tighter sign-in checks' }).click()
       await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/release-notes/${note.id}$`))
-      await expect(page.getByRole('heading', { name: 'Tighter sign-in checks' })).toBeVisible()
-      await expect(page.getByText('This release tightens how admin sign-in works.')).toBeVisible()
+      await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Tighter sign-in checks')
+      await expect(page.getByRole('textbox', { name: 'Paragraph 2' })).toHaveValue(/^This release tightens how admin sign-in works\./)
       await expect(page.getByText('Default voice')).toBeVisible()
       const publish = page.getByRole('button', { name: 'Publish' })
       await expect(publish).toBeVisible()
@@ -161,6 +170,95 @@ test.describe('release notes', () => {
       // Authenticated app pages are unaffected by all of this.
       await page.goto(`/projects/${projectId}`)
       await expect(page.getByText('Release Notes Fixture')).toBeVisible()
+    } finally {
+      await page.request.delete(`/api/projects/${projectId}`)
+    }
+  })
+
+  test('edit a draft in the block editor: autosave persists, enhance rewrites one paragraph', async ({ page }) => {
+    test.setTimeout(120_000)
+    await login(page)
+    await setStubState(page, EDITOR_REPO, 'initial')
+    const projectId = await createProject(page, 'Release Notes Editor Fixture', 'notes-editor')
+
+    try {
+      await analysisAndSync(page, EDITOR_REPO, projectId)
+
+      // A draft over the whole release (the modal flow is pinned above);
+      // 202 → poll the list until the drafted note appears.
+      expect((await page.request.post(`/api/projects/${projectId}/release-notes`, {
+        data: { releaseId: await firstReleaseId(page, projectId) },
+      })).status()).toBe(202)
+      await expect.poll(async () => {
+        const response = await page.request.get(`/api/projects/${projectId}/release-notes`)
+        return ((await response.json()) as NoteSummary[]).length
+      }, { timeout: 30_000 }).toBe(1)
+      const listResponse = await page.request.get(`/api/projects/${projectId}/release-notes`)
+      const note = ((await listResponse.json()) as NoteSummary[])[0]!
+
+      await page.goto(`/projects/${projectId}/release-notes/${note.id}`)
+      const title = page.getByRole('textbox', { name: 'Title' })
+      const paragraph = page.getByRole('textbox', { name: 'Paragraph 2' })
+      await expect(title).toHaveValue('Tighter sign-in checks')
+
+      // Only paragraph blocks can be enhanced.
+      await expect(page.getByRole('button', { name: 'Enhance', exact: true })).toHaveCount(1)
+
+      // Edits autosave; the quiet indicator reports the save.
+      await title.fill('Better sign-in, explained')
+      await paragraph.fill('Sign-in now asks admins for a second factor before any session starts.')
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+
+      // A reload proves the autosave landed on the server.
+      await page.reload()
+      await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Better sign-in, explained')
+      await expect(page.getByRole('textbox', { name: 'Paragraph 2' })).toHaveValue('Sign-in now asks admins for a second factor before any session starts.')
+
+      // Enhance rewrites just that paragraph (the mock LLM answers the
+      // note-enhance fixture) and the rewrite autosaves in turn.
+      await page.getByRole('button', { name: 'Enhance', exact: true }).click()
+      await page.getByRole('button', { name: 'Rewrite paragraph' }).click()
+      await expect(page.getByRole('textbox', { name: 'Paragraph 2' })).toHaveValue(
+        /^Admin sign-in now has a second gate:/,
+        { timeout: 15_000 },
+      )
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+
+      // A manual edit after the enhance wins the next save — no stale
+      // response clobbers it.
+      await page.getByRole('textbox', { name: 'Paragraph 2' }).fill('Manual words win after the rewrite.')
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+
+      // A list block grows one item per line and persists across reloads.
+      await page.getByRole('button', { name: 'Add block' }).click()
+      await page.getByRole('menuitem', { name: 'List' }).click()
+      await page.getByRole('textbox', { name: 'List 4' }).fill('First new item\nSecond new item\nThird new item')
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+      await page.reload()
+      await expect(page.getByRole('textbox', { name: 'List 4' })).toHaveValue('First new item\nSecond new item\nThird new item')
+
+      // Move up swaps the order, and the swap persists.
+      await page.getByRole('button', { name: 'Move block 4 up' }).click()
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+      await page.reload()
+      await expect(page.getByRole('textbox', { name: 'List 3' })).toHaveValue('First new item\nSecond new item\nThird new item')
+
+      // Delete the heading: positions renumber, the deletion persists.
+      await page.getByRole('button', { name: 'Delete block 1' }).click()
+      await expect(page.getByText('Saved just now')).toBeVisible({ timeout: 10_000 })
+      await page.reload()
+      await expect(page.getByRole('textbox', { name: 'Heading 1' })).toHaveCount(0)
+      await expect(page.getByRole('textbox', { name: 'Paragraph 1' })).toHaveValue('Manual words win after the rewrite.')
+      await expect(page.getByRole('textbox', { name: 'List 2' })).toHaveValue('First new item\nSecond new item\nThird new item')
+
+      // The public page (once published) renders the edited content.
+      await page.getByRole('button', { name: 'Publish' }).click()
+      await expect(page.getByText('Published', { exact: true })).toBeVisible()
+      const anon = await loggedOutPage(page)
+      await anon.goto(`/notes/${note.slug}`)
+      await expect(anon.getByRole('heading', { name: 'Better sign-in, explained' })).toBeVisible()
+      await expect(anon.getByText('Manual words win after the rewrite.')).toBeVisible()
+      await anon.context().close()
     } finally {
       await page.request.delete(`/api/projects/${projectId}`)
     }

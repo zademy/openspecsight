@@ -1,0 +1,3 @@
+{
+  "text": "Admin sign-in now has a second gate: org admins confirm a code from their second factor before any session starts. While you keep working, the session quietly renews itself instead of expiring mid-afternoon, and the old token endpoint has been retired. Nothing to migrate — sign in again and carry on."
+}

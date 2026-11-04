@@ -38,6 +38,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   registerStubRepo({ owner: 'acme', repo: 'digests', fixtureAlias: 'tasks' })
   registerStubRepo({ owner: 'acme', repo: 'digests-api', fixtureAlias: 'tasks' })
   registerStubRepo({ owner: 'acme', repo: 'notes', fixtureAlias: 'tasks' })
+  registerStubRepo({ owner: 'acme', repo: 'notes-editor', fixtureAlias: 'tasks' })
   registerStubAdmin()
 
   await startGithubStub()

@@ -2,8 +2,9 @@ import { randomBytes } from 'node:crypto'
 import { and, desc, eq, inArray } from 'drizzle-orm'
 import { getDB } from '../db/client'
 import { features, jobs, releaseNotes, releases, scenarioRevisions, voices } from '../db/schema'
-import { ContentBlocksSchema, CreateReleaseNoteSchema, NoteDraftSchema } from '../../shared/schemas'
+import { ContentBlocksSchema, CreateReleaseNoteSchema, NoteDraftSchema, NoteEnhanceSchema } from '../../shared/schemas'
 import type {
+  ContentBlock,
   ContentBlocks,
   CreateReleaseNoteInput,
   CreateVoiceInput,
@@ -14,6 +15,7 @@ import type {
   ReleaseNoteSummary,
   RevisionKind,
   Voice,
+  UpdateReleaseNoteInput,
 } from '../../shared/types'
 import { enqueueJob } from './jobs.service'
 import { createLlmClient, type LlmClient } from './llm.service'
@@ -568,4 +570,125 @@ export function unpublishReleaseNote(noteId: number): PublishResult | null {
     .where(eq(releaseNotes.id, noteId))
     .run()
   return { slug: note.slug }
+}
+
+// --- Editing: the autosave PATCH and the per-block enhance ---
+
+/** Error thrown when an edit or an enhance names a block index with no block. */
+export class NoteBlockRangeError extends Error {
+  constructor(index: number) {
+    super(`No block at index ${index}`)
+    this.name = 'NoteBlockRangeError'
+  }
+}
+
+/** Error thrown for block types enhance cannot rewrite (paragraphs only). */
+export class NoteBlockNotEnhancableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'NoteBlockNotEnhancableError'
+  }
+}
+
+/** Error thrown when the rewrite comes back empty and nothing was stored. */
+export class NoteEnhanceEmptyError extends Error {
+  constructor() {
+    super('The rewrite came back empty; the block was left unchanged')
+    this.name = 'NoteEnhanceEmptyError'
+  }
+}
+
+/**
+ * Field-level autosave write: stores exactly the fields the request
+ * sent — a title-only PATCH leaves the blocks untouched, a blocks-only
+ * PATCH leaves the title. Concurrency contract: the blocks field is
+ * last-write-wins per WHOLE array, whoever PATCHes last replaces every
+ * block. One browser session cannot clobber itself — the editor sends
+ * its saves one at a time and flushes the pending debounce before an
+ * enhance — but two open tabs can, and that is the documented, accepted
+ * trade for keeping the API dumb. Returns the full detail; null for an
+ * unknown note.
+ */
+export function updateReleaseNote(noteId: number, patch: UpdateReleaseNoteInput): ReleaseNoteDetail | null {
+  const note = getDB().select({ id: releaseNotes.id })
+    .from(releaseNotes)
+    .where(eq(releaseNotes.id, noteId))
+    .get()
+  if (!note) {
+    return null
+  }
+  const set: Partial<typeof releaseNotes.$inferInsert> = {}
+  if (patch.title !== undefined) {
+    set.title = patch.title
+  }
+  if (patch.blocks !== undefined) {
+    set.blocksJson = JSON.stringify(patch.blocks)
+  }
+  if (set.title !== undefined || set.blocksJson !== undefined) {
+    getDB().update(releaseNotes).set(set).where(eq(releaseNotes.id, noteId)).run()
+  }
+  return getReleaseNote(noteId)
+}
+
+function buildEnhancePrompt(blockText: string, voiceLine: string, instruction: string | undefined): string {
+  return [
+    'Rewrite the release-note paragraph below in place.',
+    `Voice: ${voiceLine}`,
+    'Audience: people who use the product, not the engineers who built it.',
+    ...(instruction ? [`Instruction: ${instruction}`] : []),
+    '',
+    'Paragraph:',
+    blockText,
+    '',
+    'Return only the rewritten paragraph text — no heading, no list, no commentary.',
+  ].join('\n')
+}
+
+/**
+ * Rewrites ONE paragraph block through the note-enhance LLM call and
+ * stores the result through updateReleaseNote (blocks only — the title
+ * is never touched). The prompt carries the note's voice line, the
+ * current block text and the optional instruction, and demands just the
+ * rewritten text. Headings are refused outright and lists are refused
+ * until NoteEnhanceSchema grows an items variant — documented
+ * limitations, not silent no-ops. Unknown note or corrupt blocks answer
+ * null; a bad index throws NoteBlockRangeError; an empty rewrite throws
+ * NoteEnhanceEmptyError and stores nothing, so enhance can never drift
+ * a stored row out of ContentBlocksSchema.
+ */
+export async function enhanceNoteBlock(noteId: number, index: number, instruction: string | undefined, deps?: NoteDeps): Promise<ContentBlock | null> {
+  const row = getDB().select({ note: releaseNotes, voiceLine: voices.description })
+    .from(releaseNotes)
+    .leftJoin(voices, eq(releaseNotes.voiceId, voices.id))
+    .where(eq(releaseNotes.id, noteId))
+    .get()
+  if (!row) {
+    return null
+  }
+  const blocks = parseBlocks(row.note.blocksJson)
+  if (!blocks) {
+    return null
+  }
+  if (!Number.isInteger(index) || index < 0 || index >= blocks.length) {
+    throw new NoteBlockRangeError(index)
+  }
+  const block = blocks[index]!
+  if (block.type !== 'paragraph') {
+    throw new NoteBlockNotEnhancableError(
+      block.type === 'heading'
+        ? 'Headings are your own words — rewrite them yourself'
+        : 'List items cannot be enhanced yet — rewrite them in the editor',
+    )
+  }
+
+  const llm = deps?.llm ?? createLlmClient()
+  const prompt = buildEnhancePrompt(block.text!, row.voiceLine ?? DEFAULT_VOICE_LINE, instruction)
+  const answer = await llm.generate('note-enhance', NoteEnhanceSchema, prompt, { projectId: row.note.projectId })
+  const rewritten = answer.text.trim()
+  if (!rewritten) {
+    throw new NoteEnhanceEmptyError()
+  }
+  const next = blocks.map((entry, entryIndex) => (entryIndex === index ? { ...entry, text: rewritten } : entry))
+  updateReleaseNote(noteId, { blocks: next })
+  return next[index]!
 }
