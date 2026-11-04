@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
-import { connections, conversations, features, flows, messages, projects, repositories, scenarios } from '../../server/db/schema'
+import { connections, conversations, digests, features, flows, messages, projects, releaseNotes, repositories, scenarios, voices } from '../../server/db/schema'
 
 /**
  * The client is a singleton that reads DATABASE_PATH lazily on the first
@@ -192,6 +192,148 @@ describe('schema roundtrip', () => {
 
     db.delete(messages).where(eq(messages.id, message.id)).run()
     expect(db.select({ id: messages.id }).from(messages).all()).toHaveLength(0)
+  })
+
+  test('inserts voices, digests and release notes and reads them back', () => {
+    const db = getDB()
+
+    const project = db.insert(projects).values({
+      name: 'Widget Platform',
+      description: 'The widget platform product spec',
+      createdAt: '2026-11-03T00:00:00.000Z',
+    }).returning().get()
+
+    const defaultVoice = db.insert(voices).values({
+      projectId: project.id,
+      name: 'Release Radar',
+      description: 'Benefit-first changelog prose for developers',
+      isDefault: 1,
+    }).returning().get()
+
+    const quietVoice = db.insert(voices).values({
+      projectId: project.id,
+      name: 'Field Notes',
+      description: 'Quiet, factual tone for internal stakeholders',
+      isDefault: 0,
+    }).returning().get()
+
+    const digestBlocks = [
+      { type: 'heading', text: 'Highlights' },
+      { type: 'list', items: ['Login errors now say what went wrong', 'Flow diagrams export as SVG'] },
+    ]
+    const digest = db.insert(digests).values({
+      projectId: project.id,
+      rangeFrom: '2026-10-27',
+      rangeTo: '2026-11-02',
+      title: 'Week 44: clearer login errors and SVG flows',
+      blocksJson: JSON.stringify(digestBlocks),
+      emailedAt: null,
+      createdAt: '2026-11-03T08:00:00.000Z',
+    }).returning().get()
+
+    const noteBlocks = [{ type: 'paragraph', text: 'Password failures now name the cause.' }]
+    const draftNote = db.insert(releaseNotes).values({
+      projectId: project.id,
+      title: 'Login errors that point at the fix',
+      rangeFrom: '2026-10-27',
+      rangeTo: '2026-11-02',
+      voiceId: defaultVoice.id,
+      blocksJson: JSON.stringify(noteBlocks),
+      slug: 'login-errors-that-point-at-the-fix-x7k2',
+      published: 0,
+      createdAt: '2026-11-03T09:00:00.000Z',
+      publishedAt: null,
+    }).returning().get()
+
+    const publishedNote = db.insert(releaseNotes).values({
+      projectId: project.id,
+      title: 'Flow diagrams export as SVG',
+      rangeFrom: '2026-10-20',
+      rangeTo: '2026-10-26',
+      voiceId: null,
+      blocksJson: '[]',
+      slug: 'flow-diagrams-export-as-svg-q4m9',
+      published: 1,
+      createdAt: '2026-10-27T09:00:00.000Z',
+      publishedAt: '2026-10-28T12:00:00.000Z',
+    }).returning().get()
+
+    expect(defaultVoice).toEqual({
+      id: expect.any(Number),
+      projectId: project.id,
+      name: 'Release Radar',
+      description: 'Benefit-first changelog prose for developers',
+      isDefault: 1,
+    })
+    expect(quietVoice).toEqual({
+      id: expect.any(Number),
+      projectId: project.id,
+      name: 'Field Notes',
+      description: 'Quiet, factual tone for internal stakeholders',
+      isDefault: 0,
+    })
+    expect(digest).toEqual({
+      id: expect.any(Number),
+      projectId: project.id,
+      rangeFrom: '2026-10-27',
+      rangeTo: '2026-11-02',
+      title: 'Week 44: clearer login errors and SVG flows',
+      blocksJson: JSON.stringify(digestBlocks),
+      emailedAt: null,
+      createdAt: '2026-11-03T08:00:00.000Z',
+    })
+    expect(draftNote).toEqual({
+      id: expect.any(Number),
+      projectId: project.id,
+      title: 'Login errors that point at the fix',
+      rangeFrom: '2026-10-27',
+      rangeTo: '2026-11-02',
+      voiceId: defaultVoice.id,
+      blocksJson: JSON.stringify(noteBlocks),
+      slug: 'login-errors-that-point-at-the-fix-x7k2',
+      published: 0,
+      createdAt: '2026-11-03T09:00:00.000Z',
+      publishedAt: null,
+    })
+    expect(publishedNote).toEqual({
+      id: expect.any(Number),
+      projectId: project.id,
+      title: 'Flow diagrams export as SVG',
+      rangeFrom: '2026-10-20',
+      rangeTo: '2026-10-26',
+      voiceId: null,
+      blocksJson: '[]',
+      slug: 'flow-diagrams-export-as-svg-q4m9',
+      published: 1,
+      createdAt: '2026-10-27T09:00:00.000Z',
+      publishedAt: '2026-10-28T12:00:00.000Z',
+    })
+  })
+
+  test('rejects a second release note with the same slug', () => {
+    const db = getDB()
+
+    const project = db.insert(projects).values({
+      name: 'Widget Platform',
+      description: 'The widget platform product spec',
+      createdAt: '2026-11-03T00:00:00.000Z',
+    }).returning().get()
+
+    const values = {
+      projectId: project.id,
+      title: 'Login errors that point at the fix',
+      rangeFrom: '2026-10-27',
+      rangeTo: '2026-11-02',
+      voiceId: null,
+      blocksJson: '[]',
+      slug: 'login-errors-that-point-at-the-fix-x7k2',
+      published: 0,
+      createdAt: '2026-11-03T09:00:00.000Z',
+      publishedAt: null,
+    }
+    db.insert(releaseNotes).values(values).run()
+
+    expect(() => db.insert(releaseNotes).values(values).run()).toThrow()
   })
 })
 

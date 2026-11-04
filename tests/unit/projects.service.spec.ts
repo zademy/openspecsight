@@ -5,15 +5,18 @@ import {
   annotations,
   connections,
   conversations,
+  digests,
   featureFiles,
   features,
   flows,
   messages,
   projects,
   repositories,
+  releaseNotes,
   releases,
   scenarioRevisions,
   scenarios,
+  voices,
 } from '../../server/db/schema'
 import { GithubError, type GithubService, type GithubTreeEntry } from '../../server/services/github.service'
 import {
@@ -228,6 +231,18 @@ describe('deleteProject', () => {
       { conversationId: conversation.id, role: 'user', content: 'What happens with a wrong password?', citationsJson: null, createdAt: new Date().toISOString() },
       { conversationId: conversation.id, role: 'assistant', content: 'It shows an error [1].', citationsJson: '[]', createdAt: new Date().toISOString() },
     ]).run()
+    const voice = db.insert(voices).values({
+      projectId: created.id, name: 'Release Radar', description: 'Benefit-first changelog prose', isDefault: 1,
+    }).returning().get()
+    db.insert(digests).values({
+      projectId: created.id, rangeFrom: '2026-10-27', rangeTo: '2026-11-02', title: 'Week 44',
+      blocksJson: '[]', emailedAt: null, createdAt: new Date().toISOString(),
+    }).run()
+    db.insert(releaseNotes).values({
+      projectId: created.id, title: 'Wrong-password errors explained', rangeFrom: '2026-10-27', rangeTo: '2026-11-02',
+      voiceId: voice.id, blocksJson: '[]', slug: 'wrong-password-errors-explained-k3f8', published: 0,
+      createdAt: new Date().toISOString(), publishedAt: null,
+    }).run()
     db.insert(analyses).values({
       projectId: created.id, type: 'initial', status: 'done', progress: 100, step: 'done', statsJson: '{}',
       error: null, createdAt: new Date().toISOString(), finishedAt: null,
@@ -235,7 +250,7 @@ describe('deleteProject', () => {
 
     expect(deleteProject(created.id)).toBe(true)
 
-    for (const table of [projects, features, scenarios, featureFiles, connections, flows, releases, scenarioRevisions, annotations, analyses, conversations, messages]) {
+    for (const table of [projects, features, scenarios, featureFiles, connections, flows, releases, scenarioRevisions, annotations, analyses, conversations, messages, digests, releaseNotes, voices]) {
       expect(db.select().from(table).all()).toHaveLength(0)
     }
     expect(getProjectDetail(created.id)).toBeNull()

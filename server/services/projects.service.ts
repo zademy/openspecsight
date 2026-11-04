@@ -5,15 +5,18 @@ import {
   annotations,
   connections,
   conversations,
+  digests,
   featureFiles,
   features,
   flows,
   messages,
   projects,
   repositories,
+  releaseNotes,
   releases,
   scenarioRevisions,
   scenarios,
+  voices,
 } from '../db/schema'
 import { encryptSecret } from '../utils/crypto'
 import { createGithubService, GithubError, type GithubService } from './github.service'
@@ -180,7 +183,8 @@ export async function addRepository(
 
 /**
  * Deletes a project and everything hanging off it (repositories, features,
- * scenarios, files, analyses, releases, revisions, annotations) in one
+ * scenarios, files, analyses, releases, revisions, annotations, digests,
+ * release notes and voices) in one
  * transaction. Returns false when the project does not exist. Job rows are
  * queue bookkeeping without a project column and stay behind — their handlers
  * simply find no data.
@@ -230,6 +234,10 @@ export function deleteProject(id: number): boolean {
       tx.delete(messages).where(inArray(messages.conversationId, conversationIds)).run()
     }
     tx.delete(conversations).where(eq(conversations.projectId, id)).run()
+    // Release notes reference voices, so notes are cleared first.
+    tx.delete(digests).where(eq(digests.projectId, id)).run()
+    tx.delete(releaseNotes).where(eq(releaseNotes.projectId, id)).run()
+    tx.delete(voices).where(eq(voices.projectId, id)).run()
     tx.delete(repositories).where(eq(repositories.projectId, id)).run()
     tx.delete(projects).where(eq(projects.id, id)).run()
 

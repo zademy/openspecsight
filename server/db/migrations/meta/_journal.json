@@ -15,6 +15,13 @@
       "when": 1793782198133,
       "tag": "0001_luxuriant_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793810413323,
+      "tag": "0002_eager_the_anarchist",
+      "breakpoints": true
     }
   ]
 }

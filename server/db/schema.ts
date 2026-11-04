@@ -134,3 +134,36 @@ export const messages = sqliteTable('messages', {
   citationsJson: text('citationsJson'),
   createdAt: text('createdAt').notNull(),
 })
+
+export const voices = sqliteTable('voices', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('projectId').notNull().references(() => projects.id),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  isDefault: integer('isDefault').notNull(), // SQLite booleans: 1 = default, 0 = not
+})
+
+export const digests = sqliteTable('digests', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('projectId').notNull().references(() => projects.id),
+  rangeFrom: text('rangeFrom').notNull(),
+  rangeTo: text('rangeTo').notNull(),
+  title: text('title').notNull(),
+  blocksJson: text('blocksJson').notNull(),
+  emailedAt: text('emailedAt'), // null until sent; stays null when SMTP is not configured
+  createdAt: text('createdAt').notNull(),
+})
+
+export const releaseNotes = sqliteTable('releaseNotes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  projectId: integer('projectId').notNull().references(() => projects.id),
+  title: text('title').notNull(),
+  rangeFrom: text('rangeFrom').notNull(),
+  rangeTo: text('rangeTo').notNull(),
+  voiceId: integer('voiceId').references(() => voices.id),
+  blocksJson: text('blocksJson').notNull(),
+  slug: text('slug').notNull().unique(),
+  published: integer('published').notNull(), // SQLite booleans: 1 = published, 0 = draft
+  createdAt: text('createdAt').notNull(),
+  publishedAt: text('publishedAt'),
+})

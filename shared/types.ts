@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -17,6 +17,12 @@ export type FlowNode = FlowGraph['nodes'][number]
 export type FlowEdge = FlowGraph['edges'][number]
 
 export type AskAnswer = z.infer<typeof AskAnswerSchema>
+
+export type ContentBlock = z.infer<typeof ContentBlockSchema>
+export type ContentBlocks = z.infer<typeof ContentBlocksSchema>
+export type DigestDraft = z.infer<typeof DigestDraftSchema>
+export type NoteDraft = z.infer<typeof NoteDraftSchema>
+export type NoteEnhance = z.infer<typeof NoteEnhanceSchema>
 
 /**
  * One node scenarioCode resolved against the live scenario rows: the flow

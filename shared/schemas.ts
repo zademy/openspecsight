@@ -141,6 +141,42 @@ export const AskAnswerSchema = z.object({
 })
 
 /**
+ * One rendered block of a digest or release note: headings and paragraphs
+ * carry text, lists carry items. Shared by the digest/note draft LLM
+ * outputs and the rows' blocksJson, so a malformed draft can never reach
+ * the renderer.
+ */
+export const ContentBlockSchema = z.object({
+  type: z.enum(['heading', 'paragraph', 'list']),
+  text: z.string().optional(),
+  items: z.array(z.string()).optional(),
+}).refine(
+  (block) => block.type === 'list'
+    ? (block.items?.length ?? 0) > 0
+    : typeof block.text === 'string' && block.text.trim().length > 0,
+  { message: 'Heading and paragraph blocks need text, list blocks need items' },
+)
+
+export const ContentBlocksSchema = z.array(ContentBlockSchema)
+
+/** Weekly or on-demand digest draft as returned by the digest-draft LLM call. */
+export const DigestDraftSchema = z.object({
+  title: z.string(),
+  blocks: ContentBlocksSchema,
+})
+
+/** Release note draft as returned by the note-draft LLM call. */
+export const NoteDraftSchema = z.object({
+  title: z.string(),
+  blocks: ContentBlocksSchema,
+})
+
+/** Rewritten block text as returned by the note-enhance LLM call. */
+export const NoteEnhanceSchema = z.object({
+  text: z.string(),
+})
+
+/**
  * Payload of POST /api/projects: a project together with its first
  * repository. Empty optional fields (untouched form inputs) normalize to
  * undefined; the server validates the repository against GitHub and defaults
