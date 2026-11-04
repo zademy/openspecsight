@@ -114,8 +114,14 @@ test.describe('flow diagram tab', () => {
       // stays out of the match by scoping to the canvas.
       await expect(canvas.getByRole('button', { name: 'Open scenario HP-1' })).toBeVisible()
 
-      // The legend explains the shapes without inventing kinds.
+      // The decision kind is genuinely a diamond: the node's glyph carries
+      // the rotation, and the legend's glyph matches it.
       const legend = page.getByRole('list', { name: 'Node shapes' })
+      const decisionNode = page.locator('.vue-flow__node', { hasText: 'Valid credentials?' })
+      await expect(decisionNode.locator('.flow-node__diamond')).toHaveClass(/rotate-45/)
+      await expect(legend.locator('li', { hasText: 'Decision' }).locator('span')).toHaveClass(/rotate-45/)
+
+      // The legend explains the shapes without inventing kinds.
       await expect(legend.getByRole('listitem').first()).toBeVisible()
 
       // A node with a scenario code jumps back: the URL loses ?tab, gains
@@ -134,6 +140,17 @@ test.describe('flow diagram tab', () => {
       await expect(anchorRow).toBeInViewport()
       await expect(anchorRow).toBeFocused()
       await expect(page.getByText('submit the login form with a registered email and the correct password')).toBeVisible()
+
+      // The same chip again after a tab round-trip: the URL already carries
+      // this hash, so no hash change fires — the jump must still reveal the
+      // row in the re-mounted pane.
+      await flowTab.click()
+      await expect(page).toHaveURL(new RegExp(`\\?tab=flow#scenario-${scenarioId}$`))
+      await expect(page.locator('.vue-flow')).toBeVisible()
+      await page.getByRole('button', { name: 'Open scenario HP-1' }).click()
+      await expect(anchorRow).toBeVisible()
+      await expect(anchorRow).toBeInViewport()
+      await expect(anchorRow).toBeFocused()
 
       // The tab state is linkable: arriving straight on ?tab=flow skips the
       // click-through and renders the canvas directly.

@@ -169,17 +169,20 @@ onMounted(() => {
 })
 
 // The flow diagram's scenario chips land here with tab + anchor in one
-// router push after mount, so the Plan-1 reveal rides the hash change too —
-// same expansion, scroll and focus as a fresh deep link.
-watch(() => route.hash, (hash) => {
-  if (hash && SCENARIO_HASH.test(hash)) {
+// router push, so the Plan-1 reveal rides the hash change — or, on a repeat
+// jump to the already-set anchor, the tab flip alone. `flush: 'post'` runs
+// it after the re-render, so a re-mounted scenarios pane is in the DOM
+// before the row is looked up (a pre-flush reveal raced it and silently
+// focused nothing).
+watch([() => route.hash, tab], ([hash, value]) => {
+  if (value === 'scenarios' && hash && SCENARIO_HASH.test(hash)) {
     void revealHashScenario()
   }
-})
+}, { flush: 'post' })
 
 function openScenario(scenarioId: number): void {
-  // Leaving ?tab behind puts the Scenarios tab back; the hash drives the
-  // reveal above.
+  // Leaving ?tab behind puts the Scenarios tab back; the hash — or, when it
+  // is unchanged, the tab flip — drives the reveal above.
   void router.push({ query: {}, hash: `#scenario-${scenarioId}` })
 }
 </script>

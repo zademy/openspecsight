@@ -36,7 +36,7 @@ const isPill = computed(() => props.data?.kind === 'start' || props.data?.kind =
   >
     <span
       v-if="props.data?.kind === 'decision'"
-      class="flow-node__diamond h-3 w-3 shrink-0 rounded-[2px] border-[1.5px] border-accented"
+      class="flow-node__diamond h-3 w-3 shrink-0 rotate-45 rounded-[2px] border-[1.5px] border-accented"
       aria-hidden="true"
     />
     <span
