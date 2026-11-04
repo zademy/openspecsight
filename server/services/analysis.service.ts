@@ -198,8 +198,10 @@ function replaceSpec(projectId: number, inventory: FeatureInventory): { count: n
 
       // Connections and flows are pure analysis output with no manual
       // variants, so a re-analysis regenerates them from scratch. The wipe
-      // must precede any feature delete: both tables reference features by
-      // foreign key, and SQLite enforces it.
+      // must precede any feature delete — both tables reference features by
+      // foreign key, and better-sqlite3 enforces that (PRAGMA foreign_keys
+      // defaults ON in this driver; the explicit order stays deliberate
+      // regardless).
       tx.delete(connections).where(eq(connections.projectId, projectId)).run()
       tx.delete(flows).where(inArray(flows.featureId, allIds)).run()
 
