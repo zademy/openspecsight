@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, AskAnswerSchema, AskQuestionSchema, ContentBlockSchema, ContentBlocksSchema, CreateAnnotationSchema, CreateDigestSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, DigestDraftSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, NoteDraftSchema, NoteEnhanceSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -343,4 +343,26 @@ export interface ConversationMessage {
 export interface ConversationDetail {
   conversation: { id: number, title: string }
   messages: ConversationMessage[]
+}
+
+// --- Communication (Plan 3): digests ---
+
+/** Payload of POST /api/projects/:id/digests: an optional explicit week. */
+export type CreateDigestInput = z.infer<typeof CreateDigestSchema>
+
+/** GET /api/projects/:id/digests — one digest of the list (newest first). */
+export interface DigestSummary {
+  id: number
+  title: string
+  rangeFrom: string
+  rangeTo: string
+  /** Set once the digest has gone out over SMTP; null while unsent. */
+  emailedAt: string | null
+  createdAt: string
+}
+
+/** GET /api/digests/:id — a digest with its parsed content blocks. */
+export interface DigestDetail extends DigestSummary {
+  projectId: number
+  blocks: ContentBlocks
 }

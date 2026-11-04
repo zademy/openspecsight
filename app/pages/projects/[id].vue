@@ -3,8 +3,7 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 /**
  * Project shell: the section rail plus the active section page (overview,
- * product spec, product map, ask, changes). Real sections link; digests
- * stays a muted "coming soon" entry until its task lands.
+ * product spec, product map, ask, changes, digests). Every section links.
  */
 
 const route = useRoute()
@@ -23,10 +22,8 @@ const items = computed<NavigationMenuItem[]>(() => [
   { label: 'Product map', to: `/projects/${projectId}/map`, active: route.path.startsWith(`/projects/${projectId}/map`) },
   { label: 'Ask', to: `/projects/${projectId}/ask`, active: route.path.startsWith(`/projects/${projectId}/ask`) },
   { label: 'Changes', to: `/projects/${projectId}/changes`, active: route.path.startsWith(`/projects/${projectId}/changes`) },
+  { label: 'Digests', to: `/projects/${projectId}/digests`, active: route.path.startsWith(`/projects/${projectId}/digests`) },
 ])
-
-/** Sections that exist in the product vision but not in this build yet. */
-const COMING_SOON = ['Digests']
 </script>
 
 <template>
@@ -39,17 +36,6 @@ const COMING_SOON = ['Digests']
         orientation="vertical"
         variant="link"
       />
-
-      <ul class="mt-4 flex flex-wrap gap-x-3 gap-y-1 sm:mt-6 sm:block sm:space-y-0.5">
-        <li
-          v-for="section in COMING_SOON"
-          :key="section"
-          class="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-dimmed"
-        >
-          <span>{{ section }}</span>
-          <span class="text-xs">soon</span>
-        </li>
-      </ul>
     </nav>
 
     <div class="min-w-0 flex-1">

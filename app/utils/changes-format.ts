@@ -7,7 +7,7 @@
  */
 
 /** Local Date from a "YYYY-MM-DD" string; null when the parts are not a date. */
-function localDate(date: string): Date | null {
+export function localDate(date: string): Date | null {
   const parts = date.split('-').map(Number)
   const [year, month, day] = parts
   if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) {

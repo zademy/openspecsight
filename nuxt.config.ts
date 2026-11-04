@@ -29,8 +29,15 @@ export default defineNuxtConfig({
   nitro: {
     experimental: {
       // Scan server/tasks/** into runnable Nitro tasks (nitropack 2.x gates
-      // tasks behind this flag). jobs:run drains the queue; no schedule.
+      // tasks behind this flag). jobs:run drains the queue; digests:weekly
+      // runs the Monday-morning digest (the task itself checks
+      // DIGEST_WEEKLY_ENABLED at runtime and no-ops when it is not 'true').
       tasks: true,
+    },
+    scheduledTasks: {
+      // Monday 09:00, server time. The flag gate lives in the task body, so
+      // the schedule is honest about when it would run even when disabled.
+      '0 9 * * 1': ['digests:weekly'],
     },
     hooks: {
       // Drizzle migrations are read from disk at runtime (server/db/client.ts

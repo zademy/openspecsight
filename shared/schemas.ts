@@ -230,3 +230,16 @@ export const AskQuestionSchema = z.object({
   question: z.string().trim().min(1, 'A question needs some text').max(2000),
   conversationId: z.number().int().positive().optional(),
 })
+
+/**
+ * Payload of POST /api/projects/:id/digests: an optional explicit week.
+ * Both fields default independently (to = today, from = today − 7), so the
+ * only cross-field rule is that the range must not run backwards.
+ */
+export const CreateDigestSchema = z.object({
+  rangeFrom: z.string().date('rangeFrom must be a YYYY-MM-DD date').optional(),
+  rangeTo: z.string().date('rangeTo must be a YYYY-MM-DD date').optional(),
+}).refine(
+  (range) => range.rangeFrom === undefined || range.rangeTo === undefined || range.rangeFrom <= range.rangeTo,
+  { message: 'rangeFrom must not be after rangeTo' },
+)

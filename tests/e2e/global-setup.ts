@@ -35,6 +35,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   // syncs. The base `tasks` repo stays reserved for sync.spec.
   registerStubRepo({ owner: 'acme', repo: 'changes', fixtureAlias: 'tasks' })
   registerStubRepo({ owner: 'acme', repo: 'flow', fixtureAlias: 'tasks' })
+  registerStubRepo({ owner: 'acme', repo: 'digests', fixtureAlias: 'tasks' })
+  registerStubRepo({ owner: 'acme', repo: 'digests-api', fixtureAlias: 'tasks' })
   registerStubAdmin()
 
   await startGithubStub()

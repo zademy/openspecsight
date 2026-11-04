@@ -1,0 +1,13 @@
+{
+  "title": "Tighter sign-in and a steadier week",
+  "blocks": [
+    { "type": "paragraph", "text": "Three releases shipped this week, and none of them asks you to change how you work. The loudest change is at the front door: admin sign-in now wants a second factor before it hands out a session." },
+    { "type": "heading", "text": "What changed" },
+    { "type": "list", "items": [
+      "Tighter sign-in checks — admins confirm a second factor at sign-in, session cookies now slide forward on activity instead of expiring mid-afternoon, and the legacy token endpoint is gone (Authentication).",
+      "Add tasks module — the task list reached its first stable shape, and the spec picked up its happy-path scenarios (Tasks).",
+      "Trim scenario titles — titles no longer carry stray whitespace into spec rows and exports (Tasks)."
+    ] },
+    { "type": "paragraph", "text": "The spec and the product map already reflect everything above, so there is nothing to migrate. If you read one thing, make it the second-factor note and pass it to support — they will hear about it first." }
+  ]
+}
