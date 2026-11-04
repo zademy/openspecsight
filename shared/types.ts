@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { AddRepositorySchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
+import type { AddRepositorySchema, AskAnswerSchema, CreateAnnotationSchema, CreateProjectSchema, CreateScenarioSchema, ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema, RevisionKindSchema, ScenarioCategorySchema, SyncUpdateSchema, UpdateScenarioSchema } from './schemas'
 
 // --- LLM output shapes (validated at runtime by shared/schemas.ts) ---
 
@@ -15,6 +15,8 @@ export type SyncFeatureUpdate = SyncUpdate['featureUpdates'][number]
 export type FlowGraph = z.infer<typeof FlowGraphSchema>
 export type FlowNode = FlowGraph['nodes'][number]
 export type FlowEdge = FlowGraph['edges'][number]
+
+export type AskAnswer = z.infer<typeof AskAnswerSchema>
 
 /**
  * One node scenarioCode resolved against the live scenario rows: the flow
@@ -268,4 +270,28 @@ export interface MapData {
   edges: MapEdge[]
   /** True when the project has no connections yet (pre-Plan-2 projects). */
   empty: boolean
+}
+
+// --- Ask ---
+
+/**
+ * One grounded citation behind an [n] marker in the ask answer: the live
+ * scenario row the claim came from, plus the quote it backs. `index` is the
+ * 1-based display position matching the markers in `answer`.
+ */
+export interface AskCitation {
+  index: number
+  scenarioId: number
+  code: string
+  featureId: number
+  featureName: string
+  quote: string
+}
+
+/** The ask service's verdict: a grounded answer with citations, or an honest refusal. */
+export interface AskResult {
+  answer: string
+  /** True for refusals: empty question, zero coverage, or a covered:false model verdict. */
+  refused: boolean
+  citations: AskCitation[]
 }

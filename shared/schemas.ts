@@ -124,6 +124,23 @@ export const SyncUpdateSchema = z.object({
 })
 
 /**
+ * The Ask step's verdict on a user question: whether the retrieved scenarios
+ * cover it, the answer text (with [n] markers matching `citations[].index`,
+ * the prompt's scenario numbering), and the citations backing those markers.
+ */
+export const AskAnswerSchema = z.object({
+  covered: z.boolean(),
+  answer: z.string(),
+  citations: z.array(
+    z.object({
+      index: z.number().int(),
+      scenarioId: z.number().int(),
+      quote: z.string(),
+    }),
+  ),
+})
+
+/**
  * Payload of POST /api/projects: a project together with its first
  * repository. Empty optional fields (untouched form inputs) normalize to
  * undefined; the server validates the repository against GitHub and defaults

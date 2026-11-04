@@ -1,0 +1,16 @@
+{
+  "covered": true,
+  "answer": "Signing in works through the login form [1]: submit a registered email with the correct password and you land on the tasks page with a session cookie set [1]. Wrong credentials show 'Invalid email or password' [2] and no cookie is set.",
+  "citations": [
+    {
+      "index": 1,
+      "scenarioId": 1,
+      "quote": "submit the login form with a registered email and the correct password"
+    },
+    {
+      "index": 2,
+      "scenarioId": 2,
+      "quote": "the form shows 'Invalid email or password' and no cookie is set"
+    }
+  ]
+}
