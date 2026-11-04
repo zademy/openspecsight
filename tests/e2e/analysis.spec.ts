@@ -11,6 +11,13 @@ import type { AnalysisProgress } from '../../shared/types'
  */
 async function login(page: Page): Promise<void> {
   await page.goto('/login')
+  // Hydration re-mounts the form and resets the password input from state —
+  // wait until the client app owns the DOM, or an early fill gets wiped and
+  // sign-in submits an empty password.
+  await page.waitForFunction(() => {
+    const nuxtApp = (window as unknown as { useNuxtApp?: () => { isHydrating: boolean } }).useNuxtApp
+    return nuxtApp?.().isHydrating === false
+  })
   await page.getByLabel('Password').fill('test-pass')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL('http://localhost:3000/')
