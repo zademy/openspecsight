@@ -61,7 +61,6 @@ export async function ask(projectId: number, question: string, deps: AskDeps = {
  * real model can only ground by coincidence), the question, and the
  * grounding instructions: answer only from these scenarios, cite with [n]
  * and the shown id, bow out with covered:false when they do not cover it.
- * shown id, bow out with covered:false when they do not cover it.
  */
 function buildAskPrompt(question: string, hits: ScenarioSearchHit[]): string {
   const lines = hits.map((hit, position) =>
