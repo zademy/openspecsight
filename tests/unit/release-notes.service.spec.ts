@@ -239,6 +239,26 @@ describe('voices', () => {
   test('deleting an unknown voice throws VoiceNotFoundError', () => {
     expect(() => deleteVoice(projectId, 424242)).toThrow(VoiceNotFoundError)
   })
+
+  test('deleting a voice that notes reference nulls them onto the implicit Default voice', async () => {
+    process.env.LLM_MOCK = 'true'
+    const releaseId = seedSyncRelease()
+    const voice = createVoice(projectId, { name: 'Changelog', description: 'Terse and factual.' })
+    const noteId = await draftNote(projectId, { releaseId, voiceId: voice.id })
+    expect(getDB().select().from(releaseNotes).where(eq(releaseNotes.id, noteId)).get()!.voiceId).toBe(voice.id)
+
+    deleteVoice(projectId, voice.id)
+
+    const row = getDB().select().from(releaseNotes).where(eq(releaseNotes.id, noteId)).get()
+    expect(row).toBeTruthy()
+    expect(row!.voiceId).toBeNull()
+    expect(listVoices(projectId)).toEqual([])
+
+    const llm = scriptedLlm({ title: 'Note', blocks: [{ type: 'heading', text: 'x' }] })
+    const nextId = await draftNote(projectId, { releaseId }, { llm })
+    expect(llm.prompts[0]).toContain('plain, factual, no exclamation')
+    expect(getDB().select().from(releaseNotes).where(eq(releaseNotes.id, nextId)).get()!.voiceId).toBeNull()
+  })
 })
 
 describe('scope resolution', () => {

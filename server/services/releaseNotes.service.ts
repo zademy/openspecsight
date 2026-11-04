@@ -159,15 +159,20 @@ export function setVoiceDefault(projectId: number, voiceId: number): Voice {
 }
 
 /**
- * Deletes a voice. When it was the default, nobody is promoted: notes fall
- * back to the implicit "Default voice" instead of guessing a successor.
+ * Deletes a voice. Notes referencing it are moved to the implicit "Default
+ * voice" (voiceId null) in the same transaction — the foreign key would
+ * otherwise reject the delete — and nobody is promoted: the next note simply
+ * drafts under the implicit Default voice.
  */
 export function deleteVoice(projectId: number, voiceId: number): void {
   const row = getVoiceInProject(projectId, voiceId)
   if (!row) {
     throw new VoiceNotFoundError(voiceId, projectId)
   }
-  getDB().delete(voices).where(eq(voices.id, voiceId)).run()
+  getDB().transaction((tx) => {
+    tx.update(releaseNotes).set({ voiceId: null }).where(eq(releaseNotes.voiceId, voiceId)).run()
+    tx.delete(voices).where(eq(voices.id, voiceId)).run()
+  })
 }
 
 // --- Selection ---
