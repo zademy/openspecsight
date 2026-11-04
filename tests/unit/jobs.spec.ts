@@ -7,7 +7,7 @@ import {
   getLatestAnalysis,
   startInitialAnalysis,
 } from '../../server/services/analyses.service'
-import { enqueueJob, kickJobProcessing, processNextJobs, registerJobHandler, sweepInterruptedJobs } from '../../server/services/jobs.service'
+import { enqueueJob, kickJobProcessing, processNextJobs, recoverAfterRestart, registerJobHandler, sweepInterruptedJobs } from '../../server/services/jobs.service'
 
 /**
  * Jobs queue tests run against a :memory: database with no plugin registered,
@@ -213,6 +213,81 @@ describe('sweepInterruptedJobs', () => {
     expect(requeued).toBe(0)
     expect(getJob(queuedId)).toMatchObject({ status: 'queued', attempts: 0, error: null, finishedAt: null })
     expect(getJob(doneId)).toMatchObject({ status: 'done', attempts: 1, error: null })
+  })
+})
+
+describe('recoverAfterRestart (boot routine)', () => {
+  /**
+   * Crash → restart, end to end: the process died with a job `running` and
+   * its analyses row reporting progress. The boot routine must requeue the
+   * job, error the orphaned progress row, and kick processing — after which
+   * the queue drains the requeued job to completion.
+   */
+  test('requeues the job, errors its analyses row, kicks processing and drains the job', async () => {
+    const projectId = insertProject('Crash Recovery')
+    const db = getDB()
+    const analysis = db.insert(analyses).values({
+      projectId, type: 'initial', status: 'running', progress: 50, step: 'inventory',
+      statsJson: '{}', error: null, createdAt: '2026-11-03T00:00:00.000Z', finishedAt: null,
+    }).returning().get()
+    const job = db.insert(jobs).values({
+      type: 't-recovery', payloadJson: JSON.stringify({ analysisId: analysis.id, projectId }),
+      status: 'running', attempts: 1, error: null,
+      createdAt: '2026-11-03T00:00:00.000Z', finishedAt: null,
+    }).returning().get()
+    const kicks: string[] = []
+    let handled = false
+    // The real initial-analysis handler revives its errored row on its first
+    // progress step; mirror that here so the drain proves the revival path.
+    registerJobHandler('t-recovery', async () => {
+      handled = true
+      db.update(analyses).set({ status: 'running', progress: 10, step: 'tree', error: null }).where(eq(analyses.id, analysis.id)).run()
+    })
+
+    const requeued = recoverAfterRestart(async (name) => {
+      kicks.push(name)
+    })
+
+    expect(requeued).toBe(1)
+    expect(kicks).toEqual(['jobs:run'])
+    expect(getJob(job.id)).toMatchObject({ status: 'queued', attempts: 2, error: null, finishedAt: null })
+    expect(db.select().from(analyses).where(eq(analyses.id, analysis.id)).get()).toMatchObject({
+      status: 'error', step: 'error', error: 'interrupted by restart',
+    })
+
+    const processed = await processNextJobs(5)
+
+    expect(processed).toBe(1)
+    expect(handled).toBe(true)
+    expect(getJob(job.id)).toMatchObject({ status: 'done', error: null })
+    // The revived row reached a terminal state again — nothing stuck forever.
+    expect(db.select().from(analyses).where(eq(analyses.id, analysis.id)).get()).toMatchObject({
+      status: 'running', progress: 10, step: 'tree', error: null,
+    })
+  })
+
+  test('errors queued and running analyses rows of every project, done rows untouched', () => {
+    const projectId = insertProject('Sweep Progress Rows')
+    const db = getDB()
+    const insertAnalysis = (status: 'queued' | 'running' | 'done') => db.insert(analyses).values({
+      projectId, type: 'initial', status, progress: 10, step: 'tree',
+      statsJson: '{}', error: null, createdAt: '2026-11-03T00:00:00.000Z', finishedAt: null,
+    }).returning().get()
+    const queued = insertAnalysis('queued')
+    const running = insertAnalysis('running')
+    const done = insertAnalysis('done')
+
+    recoverAfterRestart(async () => {})
+
+    expect(db.select().from(analyses).where(eq(analyses.id, queued.id)).get()).toMatchObject({
+      status: 'error', error: 'interrupted by restart',
+    })
+    expect(db.select().from(analyses).where(eq(analyses.id, running.id)).get()).toMatchObject({
+      status: 'error', error: 'interrupted by restart',
+    })
+    expect(db.select().from(analyses).where(eq(analyses.id, done.id)).get()).toMatchObject({
+      status: 'done', error: null,
+    })
   })
 })
 

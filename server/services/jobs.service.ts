@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { getDB } from '../db/client'
-import { jobs } from '../db/schema'
+import { analyses, jobs } from '../db/schema'
 import { projectExists } from './projects.service'
 
 /**
@@ -51,9 +51,9 @@ export function enqueueJob(type: string, payload: JobPayload): number {
  * only takes `queued` rows, so an orphaned row would 409-block its project's
  * sync/analysis forever. Requeues every orphaned row (spending one attempt)
  * and parks those that now reached MAX_ATTEMPTS as `error` with a readable
- * note — queued and done rows are untouched. Re-running is safe: the
- * pipelines are idempotent-clean-slate (the analysis wipes and rebuilds; the
- * sync applies everything in one transaction).
+ * note — queued and done rows are untouched. Handlers are safe to re-run:
+ * the analysis pipeline wipes and rebuilds its rows, the sync pipeline
+ * applies everything in one transaction.
  */
 export function sweepInterruptedJobs(): number {
   const db = getDB()
@@ -68,6 +68,35 @@ export function sweepInterruptedJobs(): number {
       .run()
     return requeued.changes
   })
+}
+
+/**
+ * Errors every analyses row a restart left `queued|running` — the sweep's
+ * counterpart on the progress rows, which would otherwise sit there forever
+ * (their jobs are back to `queued`, but nothing would report on the old rows
+ * again). Both job handlers revive their own row when a requeued job runs:
+ * the initial-analysis step updates set its row `running` on the first step,
+ * and the sync handler picks the newest queued/running `sync` row — or, when
+ * recovery errored that one, creates a fresh row — so progress stays honest.
+ */
+export function failInterruptedAnalyses(): void {
+  getDB().update(analyses)
+    .set({ status: 'error', step: 'error', error: INTERRUPTED_NOTE, finishedAt: nowISO() })
+    .where(inArray(analyses.status, ['queued', 'running']))
+    .run()
+}
+
+/**
+ * The whole boot routine, exported so tests can exercise restart recovery
+ * without the nitro runtime: sweep the orphaned jobs, error their orphaned
+ * analyses rows, then kick processing once so requeued jobs drain. The kick
+ * is fire-and-forget — handlers must already be registered when this runs.
+ */
+export function recoverAfterRestart(runTask: JobTaskRunner): number {
+  const requeued = sweepInterruptedJobs()
+  failInterruptedAnalyses()
+  kickJobProcessing(runTask)
+  return requeued
 }
 
 interface ClaimedJob {

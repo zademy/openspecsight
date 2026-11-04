@@ -1,18 +1,19 @@
 import { runInitialAnalysis } from '../services/analysis.service'
 import { runSync } from '../services/sync.service'
-import { registerJobHandler, sweepInterruptedJobs } from '../services/jobs.service'
+import { recoverAfterRestart, registerJobHandler } from '../services/jobs.service'
 
 /**
- * Registers every job handler this app knows. The initial-analysis pipeline
- * lives in analysis.service (repo scan → LLM spec build); the incremental
- * sync pipeline lives in sync.service (diff → revisions → release). The
- * queue hands loosely-typed JSON payloads, so each registration coerces the
- * known fields before calling in. Before any handler runs, jobs a crashed
- * process left `running` are requeued or parked, so a restart can never
- * leave a project permanently 409-blocked behind a phantom job.
+ * Registers every job handler this app knows, then recovers from a restart.
+ * The initial-analysis pipeline lives in analysis.service (repo scan → LLM
+ * spec build); the incremental sync pipeline lives in sync.service (diff →
+ * revisions → release). The queue hands loosely-typed JSON payloads, so each
+ * registration coerces the known fields before calling in. Handlers register
+ * before recovery runs: recovery requeues jobs a crashed process left
+ * `running`, errors the analyses rows those jobs orphaned, and kicks the
+ * queue once so the requeued jobs drain — a kicked job claims itself
+ * immediately and must find its handler registered.
  */
 export default defineNitroPlugin(() => {
-  sweepInterruptedJobs()
   registerJobHandler('initial-analysis', (payload) => runInitialAnalysis({
     analysisId: Number(payload.analysisId),
     projectId: Number(payload.projectId),
@@ -22,4 +23,5 @@ export default defineNitroPlugin(() => {
     // completion, not its value.
     await runSync({ projectId: Number(payload.projectId) })
   })
+  recoverAfterRestart(runTask)
 })
