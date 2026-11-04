@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import type { AnalysisProgress } from '../../shared/types'
 import { askFromOverview, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
+import { login } from './helpers/login'
 
 /**
  * Ask end to end: the overview bar (⌘K focus → type → Enter) lands on the
@@ -14,20 +15,6 @@ import { askFromOverview, scriptLlmAnswer, wrongPasswordScenario } from './helpe
  */
 
 const PROJECT_NAME = 'Ask Fixture'
-
-async function login(page: Page): Promise<void> {
-  await page.goto('/login')
-  // Hydration re-mounts the form and resets the password input from state —
-  // wait until the client app owns the DOM, or an early fill gets wiped and
-  // sign-in submits an empty password.
-  await page.waitForFunction(() => {
-    const nuxtApp = (window as unknown as { useNuxtApp?: () => { isHydrating: boolean } }).useNuxtApp
-    return nuxtApp?.().isHydrating === false
-  })
-  await page.getByLabel('Password').fill('test-pass')
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL('http://localhost:3000/')
-}
 
 async function deleteProjectsByName(page: Page, name: string): Promise<void> {
   const response = await page.request.get('/api/projects')

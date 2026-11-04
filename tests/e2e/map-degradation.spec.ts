@@ -3,6 +3,7 @@ import path from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import Database from 'better-sqlite3'
 import type { AnalysisProgress, FeatureNode, MapData } from '../../shared/types'
+import { login } from './helpers/login'
 
 /**
  * The pre-Plan-2 predecessor, simulated honestly: a project analyzed before
@@ -31,20 +32,6 @@ function openServerDb(): Database.Database {
     }
   }
   throw new Error('e2e server database not found (expected .output/data/test-e2e.db or data/test-e2e.db)')
-}
-
-async function login(page: Page): Promise<void> {
-  await page.goto('/login')
-  // Hydration re-mounts the form and resets the password input from state —
-  // wait until the client app owns the DOM, or an early fill gets wiped and
-  // sign-in submits an empty password.
-  await page.waitForFunction(() => {
-    const nuxtApp = (window as unknown as { useNuxtApp?: () => { isHydrating: boolean } }).useNuxtApp
-    return nuxtApp?.().isHydrating === false
-  })
-  await page.getByLabel('Password').fill('test-pass')
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL('http://localhost:3000/')
 }
 
 async function deleteProjectsByName(page: Page, name: string): Promise<void> {
