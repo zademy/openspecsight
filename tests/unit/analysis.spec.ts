@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { getDB, resetDB } from '../../server/db/client'
 import { analyses, annotations, connections, featureFiles, features, flows, projects, repositories, scenarios } from '../../server/db/schema'
@@ -167,6 +167,21 @@ describe('runInitialAnalysis', () => {
     expect(flowRows).toHaveLength(2)
     const authFlow = flowRows.find((row) => row.featureId === byName.get('Authentication')?.id)
     expect(JSON.parse(authFlow?.graphJson ?? '{}')).toEqual(FLOWS.authentication)
+  })
+
+  test('a failing flow write rolls the connections insert back with it', async () => {
+    const { projectId, analysisId } = insertProjectWithRepo()
+    // The trigger aborts every flow insert, so the map transaction throws
+    // after the connections insert went through: both tables must end up
+    // untouched, not connections without flows.
+    getDB().run(sql`CREATE TRIGGER flow_insert_abort BEFORE INSERT ON flows BEGIN SELECT RAISE(ABORT, 'flow write failed'); END`)
+
+    await expect(runInitialAnalysis({ analysisId, projectId }, fakeDeps())).rejects.toThrow('flow write failed')
+
+    expect(getDB().select().from(connections).where(eq(connections.projectId, projectId)).all()).toEqual([])
+    expect(getDB().select().from(flows).all()).toEqual([])
+    const row = getDB().select().from(analyses).where(eq(analyses.id, analysisId)).get()
+    expect(row?.status).toBe('error')
   })
 
   test('drops self-links, unknown features and duplicate triples, counting each skip', async () => {

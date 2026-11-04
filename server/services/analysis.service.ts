@@ -2,7 +2,7 @@ import { asc, eq, inArray } from 'drizzle-orm'
 import { getDB, type Database } from '../db/client'
 import { analyses, annotations, connections, featureFiles, features, flows, repositories, scenarios } from '../db/schema'
 import { ConnectionsSchema, FeatureInventorySchema, FeatureScenariosSchema, FlowGraphSchema } from '../../shared/schemas'
-import type { FeatureInventory, FeatureScenarios, ScenarioCategory } from '../../shared/types'
+import type { FeatureInventory, FeatureScenarios, FlowGraph, ScenarioCategory } from '../../shared/types'
 import { decryptSecret } from '../utils/crypto'
 import { createGithubService, type GithubService } from './github.service'
 import { createLlmClient, type LlmClient } from './llm.service'
@@ -35,6 +35,11 @@ import { storeConnections, upsertFlow } from './analysis/store-maps'
  *     control-flow graph (nodes reference the stored scenario codes).
  *  7. `done` — stats land in `statsJson` and the repository's lastSyncedSha
  *     is set to the branch head.
+ *
+ * The map writes commit as one transaction: all LLM calls run first (they
+ * cannot run inside a synchronous better-sqlite3 transaction), then the
+ * connections insert and the flow upserts land together — a crash mid-write
+ * leaves both tables untouched, not connections without flows.
  *
  * Re-running is safe by design: starting a fresh analysis replaces the
  * project's previous features / scenarios / featureFiles — and wipes its
@@ -147,22 +152,33 @@ async function analyze(analysisId: number, projectId: number, deps: AnalysisDeps
 
   setStep(92, 'connections')
   const generatedConnections = await llm.generate('connections', ConnectionsSchema, buildConnectionsDigest(inventory))
-  const { inserted: connectionCount, skipped: connectionsSkipped } = storeConnections(getDB(), projectId, idsByName, generatedConnections.connections)
 
-  let flowCount = 0
+  // Every graph is generated before the write: better-sqlite3 transactions
+  // are synchronous, so the async LLM calls cannot run inside one. The
+  // progress steps below keep reporting per generated flow.
+  const flowGraphs = new Map<number, FlowGraph>()
   for (const [index, feature] of topLevel.entries()) {
     setStep(94 + Math.round((3 * (index + 1)) / topLevel.length), `flows (${index + 1}/${topLevel.length})`)
     const featureId = idsByName.get(feature.name)
     if (featureId !== undefined) {
-      const graph = await llm.generate(
+      flowGraphs.set(featureId, await llm.generate(
         `flow:${featureSlug(feature.name)}`,
         FlowGraphSchema,
         buildFlowDigest(feature.name, feature.description, featureId),
-      )
-      upsertFlow(getDB(), featureId, graph)
-      flowCount += 1
+      ))
     }
   }
+
+  // Connections and flows land in one transaction: a crash mid-write leaves
+  // both tables untouched instead of connections without flows.
+  const { inserted: connectionCount, skipped: connectionsSkipped } = db.transaction((tx) => {
+    const stored = storeConnections(tx, projectId, idsByName, generatedConnections.connections)
+    for (const [featureId, graph] of flowGraphs) {
+      upsertFlow(tx, featureId, graph)
+    }
+    return stored
+  })
+  const flowCount = flowGraphs.size
 
   const head = await github.listCommits(repository.owner, repository.repo, repository.branch, 1)
   if (head[0]) {
