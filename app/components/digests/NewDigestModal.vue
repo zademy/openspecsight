@@ -56,7 +56,7 @@ async function onCreate() {
     <UButton icon="i-lucide-plus" label="New digest" />
 
     <template #body>
-      <div class="space-y-4">
+      <form class="space-y-4" @submit.prevent="onCreate">
         <div class="grid gap-4 sm:grid-cols-2">
           <UFormField name="from" label="From">
             <UInput v-model="rangeFrom" type="date" class="w-full" autofocus />
@@ -71,9 +71,9 @@ async function onCreate() {
 
         <div class="flex justify-end gap-2 pt-1">
           <UButton label="Cancel" color="neutral" variant="ghost" @click="open = false" />
-          <UButton label="Create digest" :loading="submitting" @click="onCreate" />
+          <UButton label="Create digest" type="submit" :loading="submitting" />
         </div>
-      </div>
+      </form>
     </template>
   </UModal>
 </template>

@@ -92,9 +92,11 @@ async function loadRevisions(): Promise<void> {
 }
 
 watch([chooseRevisions, scope, releaseId, rangeFrom, rangeTo], ([chosen]) => {
+  // A new scope rebuilds the checklist, so the checked set cannot survive
+  // it: ids from the old scope would leak into the draft.
+  checkedIds.value = []
   if (!chosen) {
     revisions.value = null
-    checkedIds.value = []
     revisionsNote.value = ''
     return
   }
@@ -134,12 +136,12 @@ async function onDraft() {
   <UModal
     v-model:open="open"
     title="New release note"
-    description="Pick a release or a date range — the draft covers the scenario revisions in scope."
+    description="Pick a release or a date range. The draft covers the scenario revisions in scope."
   >
     <UButton icon="i-lucide-plus" label="New release note" />
 
     <template #body>
-      <div class="space-y-4">
+      <form class="space-y-4" @submit.prevent="onDraft">
         <fieldset class="space-y-3">
           <legend class="text-sm font-medium text-highlighted">Scope</legend>
           <URadioGroup
@@ -203,12 +205,12 @@ async function onDraft() {
           <UButton
             label="Draft note"
             icon="i-lucide-notebook-pen"
+            type="submit"
             :loading="submitting"
             :disabled="scope === 'release' ? releaseId === 0 : rangeFrom === '' || rangeTo === ''"
-            @click="onDraft"
           />
         </div>
-      </div>
+      </form>
     </template>
   </UModal>
 </template>
