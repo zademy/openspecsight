@@ -47,17 +47,15 @@ function nowISO(): string {
 }
 
 /**
- * Branch to scan: the explicit one, or the repository's default branch.
- * Resolving the default doubles as the existence check — an unknown repo
- * becomes `RepositoryNotFoundError`, other GitHub failures rethrow.
+ * Validates the repository against GitHub and returns the branch to scan:
+ * the caller's explicit one when given, otherwise the repository's default
+ * branch. The lookup always happens — a 404 turns into
+ * `RepositoryNotFoundError`, other GitHub failures rethrow.
  */
 async function resolveBranch(input: { owner: string, repo: string, branch?: string }, github: GithubService): Promise<string> {
-  if (input.branch) {
-    return input.branch
-  }
-
   try {
-    return (await github.getRepo(input.owner, input.repo)).defaultBranch
+    const { defaultBranch } = await github.getRepo(input.owner, input.repo)
+    return input.branch ?? defaultBranch
   } catch (error) {
     if (error instanceof GithubError && error.status === 404) {
       throw new RepositoryNotFoundError(input.owner, input.repo)

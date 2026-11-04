@@ -77,14 +77,38 @@ describe('createProject', () => {
     expect(listProjects()).toHaveLength(0)
   })
 
-  test('an explicit branch skips the GitHub lookup entirely', async () => {
+  test('an explicit branch wins, but the repository is still validated via GitHub', async () => {
+    let getRepoCalls = 0
+    const countingGithub: GithubService = {
+      getRepo: async () => {
+        getRepoCalls += 1
+        return { defaultBranch: 'main' }
+      },
+      getTree: async () => [],
+      getBlob: async () => {
+        throw new GithubError('not needed in this test', {})
+      },
+      compareCommits: async () => {
+        throw new GithubError('not needed in this test', {})
+      },
+      listCommits: async () => [],
+    }
+
     const created = await createProject(
       { name: 'Pinned', description: '', owner: 'acme', repo: 'tasks', branch: 'develop' },
-      // getRepo throws on any call, proving it is never reached.
-      fakeGithub(true),
+      countingGithub,
     )
 
+    expect(getRepoCalls).toBe(1)
     expect(created.repositories[0]?.branch).toBe('develop')
+  })
+
+  test('an unknown repository is rejected even when a branch is supplied', async () => {
+    await expect(
+      createProject({ name: 'Broken', description: '', owner: 'acme', repo: 'missing', branch: 'develop' }, fakeGithub()),
+    ).rejects.toThrow(RepositoryNotFoundError)
+
+    expect(listProjects()).toHaveLength(0)
   })
 
   test('a supplied PAT is stored AES-256-GCM encrypted, never in plaintext', async () => {
