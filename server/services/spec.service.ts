@@ -33,11 +33,12 @@ function codeNumber(code: string, category: ScenarioCategory): number {
 }
 
 /**
- * Shapes a scenario row for the API. `hasProposal` marks scenarios whose
- * pending sync revision is parked as "suggested" — only the feature detail
- * passes it, after looking the proposed revision ids up once per feature.
+ * Shapes a scenario row for the API. `hasProposal`/`proposalId` mark
+ * scenarios whose pending sync revision is parked as "suggested" — only the
+ * feature detail passes the parked revision id, so the spec page can offer
+ * Apply/Dismiss on the row.
  */
-function toScenarioDTO(row: ScenarioRow, hasProposal = false): ScenarioDTO {
+function toScenarioDTO(row: ScenarioRow, proposalId?: number): ScenarioDTO {
   return {
     id: row.id,
     code: row.code,
@@ -46,7 +47,7 @@ function toScenarioDTO(row: ScenarioRow, hasProposal = false): ScenarioDTO {
     outcome: row.outcome,
     category: row.category,
     source: row.source,
-    ...(hasProposal ? { hasProposal: true } : {}),
+    ...(proposalId !== undefined ? { hasProposal: true, proposalId } : {}),
   }
 }
 
@@ -117,11 +118,12 @@ export function getFeatureDetail(featureId: number): FeatureDetail | null {
   const byContext = new Map<string, ScenarioGroupDTO>()
   const rows = db.select().from(scenarios).where(eq(scenarios.featureId, featureId)).orderBy(asc(scenarios.sortOrder)).all()
 
-  // Scenario ids with a parked "suggested" revision, in one query for the
-  // whole feature (the row ids the spec page badges).
-  const proposedIds = new Set<number>()
+  // Scenario ids with a parked "suggested" revision → that revision's id, in
+  // one query for the whole feature (what the spec page badges and what its
+  // Apply/Dismiss actions address).
+  const proposalsByScenario = new Map<number, number>()
   if (rows.length > 0) {
-    const pending = db.select({ scenarioId: scenarioRevisions.scenarioId })
+    const pending = db.select({ id: scenarioRevisions.id, scenarioId: scenarioRevisions.scenarioId })
       .from(scenarioRevisions)
       .where(and(
         inArray(scenarioRevisions.scenarioId, rows.map((row) => row.id)),
@@ -130,7 +132,7 @@ export function getFeatureDetail(featureId: number): FeatureDetail | null {
       .all()
     for (const row of pending) {
       if (row.scenarioId !== null) {
-        proposedIds.add(row.scenarioId)
+        proposalsByScenario.set(row.scenarioId, row.id)
       }
     }
   }
@@ -142,7 +144,7 @@ export function getFeatureDetail(featureId: number): FeatureDetail | null {
       byContext.set(row.context, group)
       groups.push(group)
     }
-    group.scenarios.push(toScenarioDTO(row, proposedIds.has(row.id)))
+    group.scenarios.push(toScenarioDTO(row, proposalsByScenario.get(row.id)))
   }
 
   return { feature, groups }

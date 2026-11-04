@@ -79,7 +79,7 @@ export const scenarioRevisions = sqliteTable('scenarioRevisions', {
   scenarioId: integer('scenarioId').references(() => scenarios.id),
   featureId: integer('featureId').notNull().references(() => features.id),
   kind: text('kind', { enum: ['new', 'changed', 'gone', 'fixed'] }).notNull(),
-  state: text('state', { enum: ['applied', 'proposed'] }).notNull(),
+  state: text('state', { enum: ['applied', 'proposed', 'discarded'] }).notNull(),
   beforeJson: text('beforeJson'),
   afterJson: text('afterJson'),
 })

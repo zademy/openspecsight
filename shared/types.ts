@@ -77,6 +77,8 @@ export interface ScenarioDTO {
    * "suggested" while the operator's version stays authoritative.
    */
   hasProposal?: boolean
+  /** The parked revision to apply or dismiss; set alongside `hasProposal`. */
+  proposalId?: number
 }
 
 /** Release row as served by the changes API. */
@@ -95,7 +97,8 @@ export interface ReleaseDTO {
 /** Scenario revision as served by the release detail API. */
 export interface RevisionDTO {
   kind: RevisionKind
-  state: 'applied' | 'proposed'
+  /** `discarded` rows were proposed once and rejected by the operator. */
+  state: 'applied' | 'proposed' | 'discarded'
   /** Null for applied `gone` rows: the scenario was removed from the spec. */
   scenarioId: number | null
   code: string

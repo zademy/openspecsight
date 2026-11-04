@@ -10,7 +10,9 @@ import { expect, test, type Page, type Response } from '@playwright/test'
  * Review Focus #2/#3):
  * - the manually edited scenario must keep the exact text the user wrote
  *   (byte-for-byte) and show the "suggested" badge for the pending AI
- *   revision the sync parked instead of applying;
+ *   revision the sync parked instead of applying — and the operator can then
+ *   apply the suggestion from the row, which overwrites the text with the
+ *   proposal;
  * - no network response seen during the whole test may leak a secret string
  *   (`sk-`-style LLM keys, `ghp_` PATs) or the env's own test password and
  *   session secret, and no JSON payload may carry a `pat` key.
@@ -192,6 +194,16 @@ async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   const rendered = await hp1Row.locator('p').first().textContent()
   expect(rendered, 'the manual edit text must be byte-for-byte intact').toBe(`${EDITED_ACTION}→${EDITED_OUTCOME}`)
   await expect(hp1Row.getByText('suggested', { exact: true })).toBeVisible()
+
+  // Design §6.3: the suggestion is actionable right on the row. Applying it
+  // (confirm-free — it is reversible by editing) overwrites the manual text
+  // with the proposal and clears the badge.
+  await hp1Row.getByRole('button', { name: 'Apply suggestion' }).click()
+  const proposalText = 'submit the login form with a registered email and the correct password'
+    + '→the user lands on the tasks page, the session cookie is set, and its expiry slides forward on each authenticated request'
+  await expect(hp1Row.locator('p').first()).toHaveText(proposalText)
+  await expect(hp1Row.getByText('suggested', { exact: true })).toBeHidden()
+  await expect(hp1Row.getByText('manual', { exact: true })).toBeVisible()
 
   // Review Focus #3: nothing above may have leaked a secret.
   expect(leaks, leaks.join('\n')).toEqual([])

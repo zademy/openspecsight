@@ -4,7 +4,8 @@ import type { ScenarioCategory, ScenarioDTO } from '#shared/types'
 /**
  * One feature's spec: header with name and description, category filter,
  * scenario groups by context, and the operator dialogs — add and edit via
- * the scenario form, delete with a confirmation.
+ * the scenario form, delete with a confirmation, and Apply/Dismiss on rows
+ * carrying a parked sync proposal.
  */
 
 const route = useRoute()
@@ -67,6 +68,40 @@ async function onDelete(): Promise<void> {
     await refresh()
   } finally {
     deleting.value = false
+  }
+}
+
+/**
+ * Decisions on parked sync proposals (design §6.3): applying overwrites the
+ * row with the suggested text — confirm-free because it is reversible by
+ * editing; dismissing just drops the badge. Both re-read the feature so the
+ * badge and text land on the next render.
+ */
+const decidingProposal = ref(false)
+
+async function onApplyProposal(scenario: ScenarioDTO): Promise<void> {
+  if (scenario.proposalId === undefined) {
+    return
+  }
+  decidingProposal.value = true
+  try {
+    await useScenarios().applyProposal(scenario.proposalId)
+    await refresh()
+  } finally {
+    decidingProposal.value = false
+  }
+}
+
+async function onDismissProposal(scenario: ScenarioDTO): Promise<void> {
+  if (scenario.proposalId === undefined) {
+    return
+  }
+  decidingProposal.value = true
+  try {
+    await useScenarios().dismissProposal(scenario.proposalId)
+    await refresh()
+  } finally {
+    decidingProposal.value = false
   }
 }
 
@@ -140,8 +175,11 @@ onMounted(() => {
         :key="group.context"
         v-model:open="openGroups[group.context]"
         :group="group"
+        :deciding-proposal="decidingProposal"
         @edit="startEdit"
         @remove="confirmingDelete = $event"
+        @apply-proposal="onApplyProposal"
+        @dismiss-proposal="onDismissProposal"
       />
 
       <p v-if="filteredGroups.length === 0" class="max-w-prose text-sm text-muted">

@@ -58,11 +58,11 @@ function specHref(revision: RevisionDTO): string | null {
           <span class="font-mono text-xs text-muted">{{ revision.code }}</span>
           <span class="text-xs text-muted">{{ revision.featureName }}</span>
           <UBadge
-            v-if="revision.state === 'proposed'"
+            v-if="revision.state === 'proposed' || revision.state === 'discarded'"
             color="neutral"
             variant="outline"
             size="sm"
-            label="suggested"
+            :label="revision.state === 'proposed' ? 'suggested' : 'dismissed'"
           />
         </div>
 

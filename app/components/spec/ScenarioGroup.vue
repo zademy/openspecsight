@@ -7,17 +7,25 @@ import type { ScenarioDTO, ScenarioGroupDTO } from '#shared/types'
  * action as the strong text, the arrow, then the outcome. Edit and delete
  * bubble up to the feature page, which owns the dialogs and the accordion
  * open-state (deep links expand their group, see [featureId].vue). A row the
- * sync could not touch carries the "suggested" badge for its parked revision.
+ * sync could not touch carries the "suggested" badge for its parked revision,
+ * with Apply/Dismiss right beside it — applying is confirm-free because it is
+ * reversible (edit the row afterwards); all decisions bubble up like the
+ * other row actions.
  */
 
 /** Functional category colors (DESIGN.md): happy/edge/error, never decorative. */
 const CATEGORY_COLORS = { happy: 'success', edge: 'warning', error: 'error' } as const
 
-const props = defineProps<{ group: ScenarioGroupDTO }>()
+const props = defineProps<{ group: ScenarioGroupDTO, decidingProposal: boolean }>()
 
 const open = defineModel<string[]>('open', { required: true })
 
-defineEmits<{ edit: [scenario: ScenarioDTO], remove: [scenario: ScenarioDTO] }>()
+defineEmits<{
+  edit: [scenario: ScenarioDTO]
+  remove: [scenario: ScenarioDTO]
+  applyProposal: [scenario: ScenarioDTO]
+  dismissProposal: [scenario: ScenarioDTO]
+}>()
 
 interface GroupItem {
   label: string
@@ -61,6 +69,26 @@ const accordionItems = computed<GroupItem[]>(() => [
               size="sm"
               label="suggested"
             />
+            <template v-if="scenario.hasProposal && scenario.proposalId !== undefined">
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                label="Apply"
+                :aria-label="`Apply suggestion for ${scenario.code}`"
+                :disabled="decidingProposal"
+                @click="$emit('applyProposal', scenario)"
+              />
+              <UButton
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                label="Dismiss"
+                :aria-label="`Dismiss suggestion for ${scenario.code}`"
+                :disabled="decidingProposal"
+                @click="$emit('dismissProposal', scenario)"
+              />
+            </template>
             <span class="ms-auto flex gap-0.5">
               <UButton
                 icon="i-lucide-pencil-line"
