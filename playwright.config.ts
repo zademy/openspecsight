@@ -14,9 +14,13 @@ export default defineConfig({
     // can drop a JSON body that arrives mid-SSR-render (readBody then hangs and
     // pins the whole server), which flaked automated logins. Production Nitro
     // serves requests on a plain http server and does not use that bridge.
-    command: 'pnpm build && pnpm preview',
+    // Start the built bundle with node directly (no CLI layer). reuseExistingServer
+    // is false on purpose: a dev/preview server left on :3000 (e.g. with a real
+    // .env) silently serves the suite and every auth-dependent test fails —
+    // this bit twice (2026-11-03/04, see docs/superpowers/ledgers).
+    command: 'pnpm build && node .output/server/index.mjs',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 300_000,
     env: {
       LLM_MOCK: 'true',
