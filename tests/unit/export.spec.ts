@@ -118,8 +118,8 @@ describe('exportProjectMarkdown', () => {
     const { markdown } = await exportProjectMarkdown(projectId)
 
     const releasesSection = markdown.slice(markdown.indexOf('## Releases'))
-    expect(releasesSection).toContain('- Tighter sign-in checks — 2026-11-02')
-    expect(releasesSection).toContain('- Add tasks module — 2026-11-03')
+    expect(releasesSection).toContain('- Tighter sign-in checks (2026-11-02)')
+    expect(releasesSection).toContain('- Add tasks module (2026-11-03)')
     // Newest first, so the latest release reads first.
     expect(releasesSection.indexOf('Add tasks module')).toBeLessThan(releasesSection.indexOf('Tighter sign-in checks'))
   })

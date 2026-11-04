@@ -79,8 +79,8 @@ function openServerDb(): Database.Database {
 /**
  * Rewrites the project's release timestamps to yesterday and returns the
  * UTC date it stamped. The stub fixtures carry static committedAt values,
- * while the "New digest" modal defaults to the last seven days —
- * backdating keeps that default range non-empty on any run date.
+ * while the "New digest" modal defaults to the last seven days.
+ * Backdating keeps that default range non-empty on any run date.
  */
 function backdateReleasesToYesterday(projectId: number): string {
   const stamped = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -360,7 +360,7 @@ async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   }
 
   // (c) The spec export hands the browser a real download, and the
-  // document closes with the release history — including the title this
+  // document closes with the release history, including the title this
   // flow synced.
   await page.getByRole('link', { name: 'Product spec' }).click()
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/spec$`))
@@ -373,10 +373,10 @@ async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   const exported = await readFile(exportPath, 'utf8')
   expect(exported).toContain(`# ${projectName()}`)
   expect(exported).toContain('## Releases')
-  expect(exported).toContain(`- Tighter sign-in checks — ${stampedDay}`)
+  expect(exported).toContain(`- Tighter sign-in checks (${stampedDay})`)
 
-  // (d) The automatic sync: GitHub delivers a push — cookie-less, the
-  // HMAC signature over the exact body bytes being the only credential
+  // (d) The automatic sync: GitHub delivers a cookie-less push; the
+  // HMAC signature over the exact body bytes is the only credential
   // (the webhook.spec scheme). The stub serves no commit beyond the one
   // the manual sync leg pulled, so the enqueued sync finishes as an
   // honest up-to-date run; a fresh progress row landing on that step

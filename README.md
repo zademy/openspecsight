@@ -103,7 +103,7 @@ full re-analysis.
 A digest wraps one week of releases into a short summary for people who do
 not watch the repository. Create one from a project's **Digests** section:
 **New digest** prefills the last seven days, and you can set any range. A
-digest that was never emailed is still useful — it renders on its own page
+digest that was never emailed is still useful. It renders on its own page
 with its blocks, and nothing pretends it went out.
 
 Email delivery needs SMTP in `.env`:
@@ -146,7 +146,7 @@ The draft opens in a block editor: edit the title and every block, add,
 move, or delete blocks, and rewrite one paragraph with **Enhance**. Edits
 autosave. **Publish** puts the note on a public page at `/notes/<slug>`
 that anyone can read without an account. Drafts and unpublished notes 404
-there — a missing page says nothing about whether a draft exists.
+there; a missing page says nothing about whether a draft exists.
 
 ## Export
 

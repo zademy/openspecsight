@@ -133,7 +133,7 @@ export async function exportProjectMarkdown(projectId: number): Promise<{ markdo
   if (releaseRows.length > 0) {
     lines.push('## Releases', '')
     for (const release of releaseRows) {
-      lines.push(`- ${release.title} — ${release.committedAt.slice(0, 10)}`)
+      lines.push(`- ${release.title} (${release.committedAt.slice(0, 10)})`)
     }
   }
 
