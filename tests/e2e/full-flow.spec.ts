@@ -1,13 +1,17 @@
 import { expect, test, type Page, type Response } from '@playwright/test'
+import type { FeatureNode } from '../../shared/types'
+import { askFromOverview, scriptLlmAnswer, wrongPasswordScenario } from './helpers/ask-fixtures'
 
 /**
  * The whole product in one pass, exactly as a fresh operator drives it: log
  * in, connect the stubbed acme/flow repository (a fixture alias of acme/tasks
  * with its own stub state, so parallel workers cannot flip our commits),
  * run the analysis and watch the progress land on stats, browse the spec,
- * edit a scenario by hand, sync after the stub serves a new commit, and
- * follow the release back into the spec. Two hard rulings ride along (plan
- * Review Focus #2/#3):
+ * edit a scenario by hand, sync after the stub serves a new commit, follow
+ * the release back into the spec, read the refreshed maps — the flow
+ * diagram renders the sync fixture's new "Account locked" node — and ask
+ * from the overview, following the citation chip to the wrong-password
+ * row. Two hard rulings ride along (plan Review Focus #2/#3):
  * - the manually edited scenario must keep the exact text the user wrote
  *   (byte-for-byte) and show the "suggested" badge for the pending AI
  *   revision the sync parked instead of applying — and the operator can then
@@ -108,9 +112,9 @@ function watchForSecretLeaks(page: Page, leaks: string[]): void {
 }
 
 test('full flow: connect, analyze, edit, sync, and the manual edit survives', async ({ page }) => {
-  // Analysis and sync both poll the UI; 30 s per step is not enough for the
-  // whole flow including the webServer build fanfare.
-  test.setTimeout(120_000)
+  // Analysis, sync and the ask round trip all poll the UI; 30 s per step
+  // is not enough for the whole flow including the webServer build fanfare.
+  test.setTimeout(180_000)
 
   const leaks: string[] = []
   watchForSecretLeaks(page, leaks)
@@ -139,6 +143,8 @@ async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   await page.getByRole('button', { name: 'Create project' }).click()
   await page.getByRole('link', { name: new RegExp(PROJECT_NAME) }).click()
   await expect(page).toHaveURL(/\/projects\/\d+$/)
+  const projectId = Number(/\/projects\/(\d+)$/.exec(page.url())?.[1])
+  expect(projectId, 'the project id from the overview URL').toBeGreaterThan(0)
 
   // Run the first analysis from the overview and wait for the stats badge.
   await page.getByRole('button', { name: 'Run analysis' }).click()
@@ -211,6 +217,48 @@ async function runFullFlow(page: Page, leaks: string[]): Promise<void> {
   await expect(hp1Row.locator('p').first()).toHaveText(proposalText)
   await expect(hp1Row.getByText('suggested', { exact: true })).toBeHidden()
   await expect(hp1Row.getByText('manual', { exact: true })).toBeVisible()
+
+  // The sync refreshed the maps (Task 6): the Authentication↔Tasks edge
+  // carries the refreshed relation set, and the feature's flow diagram
+  // renders the redrawn graph — "Account locked" exists only in the sync
+  // fixture's flow, never in the initial one.
+  const treeResponse = await page.request.get(`/api/projects/${projectId}/features`)
+  const tree = (await treeResponse.json()) as FeatureNode[]
+  const auth = tree.find((feature) => feature.name === 'Authentication')
+  const tasks = tree.find((feature) => feature.name === 'Tasks')
+  expect(auth && tasks, 'fixture features in the tree').toBeTruthy()
+  await page.getByRole('link', { name: 'Product map' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/map$`))
+  const edgeId = `${Math.min(auth!.id, tasks!.id)}-${Math.max(auth!.id, tasks!.id)}`
+  const authTasksEdge = page.locator(`.vue-flow__edge[data-id="${edgeId}"]`)
+  await expect(authTasksEdge).toHaveCount(1)
+  await authTasksEdge.hover()
+  const edgeLabel = authTasksEdge.locator('.vue-flow__edge-text')
+  await expect(edgeLabel).toBeVisible()
+  await expect(edgeLabel).toHaveText('Authenticates, Notifies')
+  await page.locator(`.vue-flow__node[data-id="feature-${auth!.id}"]`).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/spec/${auth!.id}$`))
+  await page.getByRole('tab', { name: 'Flow diagram' }).click()
+  const lockedNode = page.locator('.vue-flow__node', { hasText: 'Account locked' })
+  await expect(lockedNode).toBeVisible()
+
+  // Ask from the overview bar, scripted with the live wrong-password
+  // scenario id (the shared ask.spec helper): the grounded answer renders
+  // with a citation chip, and the chip lands on the anchored scenario row.
+  const scenario = await wrongPasswordScenario(page, projectId)
+  scriptLlmAnswer(scenario.id)
+  await askFromOverview(page, projectId, 'What happens with a wrong password?')
+  await expect(page.getByRole('heading', { name: 'What happens with a wrong password?', level: 3 })).toBeVisible()
+  await expect(page.getByText("shows 'Invalid email or password'", { exact: false })).toBeVisible()
+  const chip = page.getByRole('link', { name: `Citation 1: ${scenario.code} in Authentication` })
+  await expect(chip).toBeVisible()
+  await expect(chip).toHaveText(scenario.code)
+  await chip.click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/spec/\\d+#scenario-${scenario.id}$`))
+  const wrongPasswordRow = page.locator(`[id="scenario-${scenario.id}"]`)
+  await expect(wrongPasswordRow).toBeVisible()
+  await expect(wrongPasswordRow).toBeInViewport()
+  await expect(wrongPasswordRow).toBeFocused()
 
   // Review Focus #3: nothing above may have leaked a secret.
   expect(leaks, leaks.join('\n')).toEqual([])
