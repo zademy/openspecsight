@@ -2,8 +2,8 @@
 
 OpenSpecSight is a self-hosted app that keeps your product spec alive: it connects to
 your GitHub repository, runs an LLM analysis to generate the living spec (features and
-scenarios), records changes per release through manual syncs, and lets you browse
-everything in a clean UI.
+scenarios), records changes per release through syncs (manual or webhook-triggered),
+and lets you browse everything in a clean UI.
 
 ## Requirements
 
@@ -74,8 +74,11 @@ Set `GITHUB_WEBHOOK_SECRET` in `.env`, then add a webhook on the GitHub
 repository: payload URL `http://your-host/api/webhooks/github`, content type
 `application/json`, and that secret. Requests are verified against their HMAC
 signature, and a push to a branch a project watches starts that project's sync
-automatically. The Settings page shows the exact URL and whether the secret is
-configured; without it the endpoint answers 503 and enqueues nothing.
+automatically. It is the same sync as the **Sync now** button: new commits
+become releases, and a push with nothing new finishes as an up-to-date
+no-op. The Settings page shows the exact URL and whether the secret is
+configured; without it the endpoint answers 503 and enqueues nothing. A
+delivery with a bad signature is rejected with 401 and enqueues nothing.
 
 ## Product map, flows, and Ask
 
@@ -94,6 +97,63 @@ answers come from your configured model, still grounded in the stored spec.
 Relations and flows are re-derived per analysis, so a feature kept only through
 manual edits may appear in the spec without map connections until the next
 full re-analysis.
+
+## Digests and email
+
+A digest wraps one week of releases into a short summary for people who do
+not watch the repository. Create one from a project's **Digests** section:
+**New digest** prefills the last seven days, and you can set any range. A
+digest that was never emailed is still useful — it renders on its own page
+with its blocks, and nothing pretends it went out.
+
+Email delivery needs SMTP in `.env`:
+
+| Key | Meaning |
+| --- | --- |
+| `SMTP_HOST` | Defaults to `smtp.gmail.com` |
+| `SMTP_PORT` | Defaults to `587` (STARTTLS) |
+| `SMTP_USER` | The account that signs in to the SMTP server |
+| `SMTP_PASS` | That account's password or app password |
+| `SMTP_FROM` | The From address on outgoing mail |
+| `DIGEST_RECIPIENTS` | Comma-separated list of digest recipients |
+
+For Gmail, create an [app password](https://myaccount.google.com/apppasswords)
+(2-step verification required) and put it in `SMTP_PASS`; Gmail's SMTP
+rejects a regular account password.
+
+The scheduled weekly run is off by default. Set `DIGEST_WEEKLY_ENABLED=true`
+to run it every Monday at 09:00 server time for each project with releases
+in the past week, or trigger a run by hand with
+`npx nuxt task run digests:weekly`. Without SMTP, the run stays honest:
+digests are generated and stored anyway, the **Email to recipients** button
+is disabled with the reason on the page, and the send API answers
+`{ sent: false, reason: "SMTP is not configured" }` instead of claiming a
+send. A digest is marked emailed only after a real delivery. Emailed
+digests link back to the app through `PUBLIC_APP_URL`, so set it to a URL
+your recipients can reach.
+
+## Release notes
+
+Release notes are AI-drafted summaries of a release, written for people who
+do not read commits. Draft one from the **Release notes** section: pick a
+release (or a date range) and a voice, and the LLM drafts a title and
+blocks. A voice is a standing instruction for how this project's notes
+should sound; the default voice needs no setup, and projects can add their
+own. If a voice is deleted, existing notes keep the default voice instead
+of breaking.
+
+The draft opens in a block editor: edit the title and every block, add,
+move, or delete blocks, and rewrite one paragraph with **Enhance**. Edits
+autosave. **Publish** puts the note on a public page at `/notes/<slug>`
+that anyone can read without an account. Drafts and unpublished notes 404
+there — a missing page says nothing about whether a draft exists.
+
+## Export
+
+The **Product spec** page has a download button (top right). It hands the
+browser one Markdown file with the whole spec: features with their
+scenarios, the feature connections, and the release history, named after
+the project.
 
 ## Scripts
 
