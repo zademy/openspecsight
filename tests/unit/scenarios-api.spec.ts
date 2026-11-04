@@ -120,6 +120,36 @@ describe('updateScenario', () => {
     })
   })
 
+  test('an empty patch is not an edit: the row keeps its source', () => {
+    const id = seedScenario()
+
+    const updated = updateScenario(id, {})
+
+    expect(updated).toMatchObject({ source: 'ai', action: 'submit the login form', outcome: 'the session cookie is set' })
+    expect(getDB().select().from(scenarios).where(eq(scenarios.id, id)).get()).toMatchObject({ source: 'ai' })
+  })
+
+  test('a category change regenerates the code for the new category', () => {
+    const id = seedScenario({ category: 'happy', code: 'HP-1' })
+    seedScenario({ category: 'error', code: 'ER-1', sortOrder: 1 })
+
+    const updated = updateScenario(id, { category: 'error' })
+
+    expect(updated).toMatchObject({
+      source: 'manual',
+      category: 'error',
+      code: 'ER-2',
+    })
+  })
+
+  test('a no-op patch with a field set to its current value keeps the source and code', () => {
+    const id = seedScenario({ category: 'happy', code: 'HP-1' })
+
+    const updated = updateScenario(id, { action: 'submit the login form' })
+
+    expect(updated).toMatchObject({ source: 'ai', code: 'HP-1', action: 'submit the login form' })
+  })
+
   test('returns null for unknown ids', () => {
     expect(updateScenario(99_999, { outcome: 'does not matter' })).toBeNull()
   })

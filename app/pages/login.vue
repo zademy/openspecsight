@@ -17,11 +17,9 @@ async function onSubmit(_event: FormSubmitEvent<{ password: string }>) {
   try {
     await $fetch('/api/auth/login', { method: 'POST', body: { password: state.password } })
 
-    // Only follow same-site absolute paths from the redirect query.
-    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
-      ? route.query.redirect
-      : '/'
-    await navigateTo(redirect)
+    // Only follow same-site absolute paths from the redirect query (see
+    // safeRedirectPath — `//evil.com` must not pass as "relative").
+    await navigateTo(safeRedirectPath(route.query.redirect))
   } catch {
     form.value?.setErrors([{ name: 'password', message: 'Incorrect password' }])
   } finally {

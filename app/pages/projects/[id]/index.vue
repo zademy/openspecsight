@@ -21,7 +21,7 @@ if (error.value || !project.value) {
 
 const { data: analysis } = await useAsyncData(`analysis-${projectId}`, () => latest(projectId))
 const { list } = useReleases()
-const { data: releaseDays } = await useAsyncData(`releases-${projectId}`, () => list(projectId))
+const { data: releaseDays } = await useAsyncData(`releases-overview-${projectId}`, () => list(projectId))
 
 const analysisActive = computed(() => analysis.value?.status === 'queued' || analysis.value?.status === 'running')
 // Poll until a terminal state: a page loaded before the analysis was started
@@ -95,7 +95,7 @@ async function pollLatest(): Promise<void> {
   }
   if (!shouldPoll.value && pendingReleaseRefresh) {
     pendingReleaseRefresh = false
-    await refreshNuxtData(`releases-${projectId}`)
+    await refreshNuxtData(`releases-overview-${projectId}`)
   }
   if (!shouldPoll.value) {
     stopPolling()
@@ -166,14 +166,20 @@ async function onSyncNow(): Promise<void> {
 
 const confirmingDelete = ref(false)
 const deleting = ref(false)
+const deleteError = ref('')
 
 async function onDelete() {
   deleting.value = true
+  deleteError.value = ''
   try {
     await remove(projectId)
     // Drop the deleted project from the home list cache before landing there.
     await refreshNuxtData('projects')
     await navigateTo('/')
+  } catch (cause) {
+    // A failed delete must not look like a hung button: say what happened.
+    deleteError.value = (cause as FetchError<{ message?: string }>).data?.message
+      ?? 'The project could not be deleted. Try again.'
   } finally {
     deleting.value = false
   }
@@ -190,7 +196,7 @@ async function onDelete() {
         color: 'error',
         variant: 'ghost',
         icon: 'i-lucide-trash-2',
-        onClick: () => { confirmingDelete = true },
+        onClick: () => { confirmingDelete = true; deleteError = '' },
       }]"
     />
 
@@ -315,9 +321,12 @@ async function onDelete() {
       :description="`This removes ${project.name} with its repositories, spec and history. This can't be undone.`"
     >
       <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton label="Cancel" color="neutral" variant="ghost" @click="confirmingDelete = false" />
-          <UButton label="Delete project" color="error" :loading="deleting" @click="onDelete" />
+        <div class="w-full space-y-3">
+          <p v-if="deleteError" role="alert" class="text-sm text-error">{{ deleteError }}</p>
+          <div class="flex w-full justify-end gap-2">
+            <UButton label="Cancel" color="neutral" variant="ghost" @click="confirmingDelete = false" />
+            <UButton label="Delete project" color="error" :loading="deleting" @click="onDelete" />
+          </div>
         </div>
       </template>
     </UModal>

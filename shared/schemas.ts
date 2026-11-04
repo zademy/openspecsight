@@ -100,8 +100,15 @@ export const CreateScenarioSchema = z.object({
   category: ScenarioCategorySchema,
 })
 
-/** Payload of PATCH /api/scenarios/:id: any subset of the editable fields. */
-export const UpdateScenarioSchema = CreateScenarioSchema.partial()
+/**
+ * Payload of PATCH /api/scenarios/:id: any subset of the editable fields.
+ * At least one field — an empty `{}` must not masquerade as an edit (it
+ * would flip the row to manual without changing anything).
+ */
+export const UpdateScenarioSchema = CreateScenarioSchema.partial().refine(
+  (patch) => Object.keys(patch).length > 0,
+  { message: 'At least one field is required' },
+)
 
 /** Payload of POST /api/scenarios/:id/annotations. */
 export const CreateAnnotationSchema = z.object({

@@ -91,6 +91,14 @@ describe('verifySessionToken rejections', () => {
     expect(verifySessionToken('a.b')).toBe(false)
   })
 
+  test('rejects a valid-looking two-segment prefix carrying trailing junk', () => {
+    // `valid.sig.junk` must not ride on the first two segments of a split.
+    const token = createSessionToken()
+    const [valid, signature] = token.split('.')
+
+    expect(verifySessionToken(`${valid}.${signature}.junk`)).toBe(false)
+  })
+
   test('returns false when SESSION_SECRET is unset (fail closed)', () => {
     delete process.env.SESSION_SECRET
 

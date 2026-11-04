@@ -37,7 +37,7 @@ const featureItems = computed(() => [
 ])
 
 const { data: days, refresh } = await useAsyncData(
-  `releases-${projectId}`,
+  `releases-changes-${projectId}`,
   () => list(projectId, {
     source: source.value,
     featureId: featureId.value || undefined,

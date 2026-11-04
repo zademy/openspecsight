@@ -32,6 +32,21 @@ function codeNumber(code: string, category: ScenarioCategory): number {
   return Number.isInteger(parsed) ? parsed : 0
 }
 
+/** Anything that can run a select: the db handle or a transaction handle. */
+type QueryRunner = Database | Transaction
+
+/**
+ * Next free scenario code in a category within a feature (highest existing
+ * suffix + 1, so a deleted code may be reused but a live one is never
+ * collided with).
+ */
+function nextCodeInCategory(runner: QueryRunner, featureId: number, category: ScenarioCategory): string {
+  const siblings = runner.select({ code: scenarios.code }).from(scenarios).where(eq(scenarios.featureId, featureId)).all()
+    .filter((row) => row.code.startsWith(`${CODE_PREFIX[category]}-`))
+  const nextNumber = siblings.reduce((max, row) => Math.max(max, codeNumber(row.code, category)), 0) + 1
+  return `${CODE_PREFIX[category]}-${nextNumber}`
+}
+
 /**
  * Shapes a scenario row for the API. `hasProposal`/`proposalId` mark
  * scenarios whose pending sync revision is parked as "suggested" — only the
@@ -168,8 +183,8 @@ export function createManualScenario(featureId: number, input: CreateScenarioInp
       eq(scenarios.featureId, featureId),
     ).all().filter((row) => row.code.startsWith(`${CODE_PREFIX[input.category]}-`))
 
-    const nextNumber = siblings.reduce((max, row) => Math.max(max, codeNumber(row.code, input.category)), 0) + 1
     const nextOrder = siblings.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1
+    const code = nextCodeInCategory(tx, featureId, input.category)
 
     const row = tx.insert(scenarios).values({
       featureId,
@@ -177,14 +192,14 @@ export function createManualScenario(featureId: number, input: CreateScenarioInp
       action: input.action,
       outcome: input.outcome,
       category: input.category,
-      code: `${CODE_PREFIX[input.category]}-${nextNumber}`,
+      code,
       sortOrder: nextOrder,
       source: 'manual',
     }).run()
 
     return {
       id: row.lastInsertRowid as number,
-      code: `${CODE_PREFIX[input.category]}-${nextNumber}`,
+      code,
       context: input.context,
       action: input.action,
       outcome: input.outcome,
@@ -195,8 +210,12 @@ export function createManualScenario(featureId: number, input: CreateScenarioInp
 }
 
 /**
- * Applies an operator edit to a scenario and flips it to `source='manual'`.
- * Null when the scenario does not exist.
+ * Applies an operator edit to a scenario. A real change flips the row to
+ * `source='manual'` — sync then protects the operator's version; an empty or
+ * no-op patch leaves the row exactly as it was (no spurious ownership flip).
+ * A category change also regenerates the code for the new category (next
+ * free code), so a scenario that became an error path no longer rides its
+ * stale HP-n code. Null when the scenario does not exist.
  */
 export function updateScenario(id: number, patch: UpdateScenarioInput): ScenarioDTO | null {
   const db = getDB()
@@ -211,15 +230,29 @@ export function updateScenario(id: number, patch: UpdateScenarioInput): Scenario
     action: patch.action ?? existing.action,
     outcome: patch.outcome ?? existing.outcome,
     category: patch.category ?? existing.category,
-    source: 'manual',
+    code: patch.category === undefined || patch.category === existing.category
+      ? existing.code
+      : nextCodeInCategory(db, existing.featureId, patch.category),
   }
-  db.update(scenarios).set({
-    context: updated.context,
-    action: updated.action,
-    outcome: updated.outcome,
-    category: updated.category,
-    source: 'manual',
-  }).where(eq(scenarios.id, id)).run()
+  const changed = updated.context !== existing.context || updated.action !== existing.action
+    || updated.outcome !== existing.outcome || updated.category !== existing.category
+    || updated.code !== existing.code
+  if (changed) {
+    // A real edit hands the row to the operator: sync then proposes instead
+    // of overwriting. A no-op patch leaves ownership exactly as it was.
+    updated.source = 'manual'
+  }
+
+  if (changed) {
+    db.update(scenarios).set({
+      context: updated.context,
+      action: updated.action,
+      outcome: updated.outcome,
+      category: updated.category,
+      code: updated.code,
+      source: 'manual',
+    }).where(eq(scenarios.id, id)).run()
+  }
 
   return toScenarioDTO(updated)
 }

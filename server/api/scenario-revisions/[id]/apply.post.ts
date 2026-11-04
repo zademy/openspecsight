@@ -1,4 +1,4 @@
-import { applyScenarioRevision } from '../../../../services/revisions.service'
+import { applyScenarioRevision } from '../../../services/revisions.service'
 
 /**
  * Applies a proposed revision onto its scenario (design §6.3): the suggested

@@ -61,6 +61,8 @@ Fill the `LLM_*` keys in `.env` (and set `LLM_MOCK=false` or remove it):
 Any Anthropic-style endpoint works with `LLM_API_STYLE=anthropic`. For an
 OpenAI-compatible provider (vLLM, OpenRouter, local gateways), set
 `LLM_API_STYLE=openai-compatible` and point `LLM_BASE_URL` at its `/v1` root.
+Configuration is env-only — [`.env.example`](./.env.example) is the full key
+reference.
 
 For private repositories, set a `GITHUB_TOKEN` (or paste a personal access token
 when creating a project). Tokens are encrypted with `SESSION_SECRET` before they

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import { getDB, type Database } from '../db/client'
 import { analyses, annotations, featureFiles, features, repositories, scenarios } from '../db/schema'
 import { FeatureInventorySchema, FeatureScenariosSchema } from '../../shared/schemas'

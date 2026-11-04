@@ -70,7 +70,14 @@ export function verifySessionToken(token?: string): boolean {
   if (!token) {
     return false
   }
-  const [encoded, signature] = token.split('.')
+  // Strict two-segment shape: `payload.signature`. Trailing junk after a
+  // valid-looking prefix (`valid.sig.junk`) must not ride on the first two
+  // segments of a split.
+  const parts = token.split('.')
+  if (parts.length !== 2) {
+    return false
+  }
+  const [encoded, signature] = parts
   if (!encoded || !signature) {
     return false
   }

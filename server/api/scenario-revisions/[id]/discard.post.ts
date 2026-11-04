@@ -1,4 +1,4 @@
-import { discardScenarioRevision } from '../../../../services/revisions.service'
+import { discardScenarioRevision } from '../../../services/revisions.service'
 
 /**
  * Dismisses a proposed revision (design §6.3): the proposal is parked as
