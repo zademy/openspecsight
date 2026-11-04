@@ -115,6 +115,21 @@ describe('ask', () => {
     expect(llm.generateCalls[0]!.prompt).toContain('Question: login form')
   })
 
+  test('the prompt carries each retrieved scenario id so a real model can ground citations', async () => {
+    const projectId = await seedProject()
+    const db = getDB()
+    const hits = await searchScenarios(db, projectId, 'login form')
+    expect(hits.length).toBeGreaterThan(0)
+    const llm = fakeLlm({ 'ask-answer': { covered: false, answer: 'refused', citations: [] } })
+
+    await ask(projectId, 'login form', { db, llm })
+
+    const prompt = llm.generateCalls[0]!.prompt
+    for (const hit of hits) {
+      expect(prompt).toContain(`(scenarioId: ${hit.scenarioId})`)
+    }
+  })
+
   test('refuses with zero llm calls when retrieval finds nothing', async () => {
     const projectId = await seedProject()
     // A scripted would-be answer: if the refusal path ever called the llm, it would leak through.

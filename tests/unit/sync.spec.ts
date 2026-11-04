@@ -261,6 +261,19 @@ describe('runSync', () => {
       expect(triples.some((triple) => triple.from === 'Authentication' && triple.to === 'Authentication')).toBe(false)
       expect(triples.some((triple) => triple.from === 'Notifications' || triple.to === 'Notifications')).toBe(false)
     })
+
+    test('the sync prompt asks for refreshed connections and the updated flow (real-mode grounding)', async () => {
+      const projectId = await seedAnalyzedProject()
+      const deps = syncDeps()
+
+      await runSync({ projectId }, deps)
+
+      const prompt = deps.llm.generateCalls[0]!.prompt
+      expect(prompt).toContain('connections')
+      expect(prompt).toContain('flow')
+      expect(prompt).toContain('leads_to')
+      expect(prompt).toContain('authenticates')
+    })
   })
 
   test('(c) a manual scenario matched by a changed entry stays byte-for-byte and gets a proposed revision', async () => {

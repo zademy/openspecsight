@@ -53,21 +53,23 @@ export async function ask(projectId: number, question: string, deps: AskDeps = {
 }
 
 /**
- * Prompt for the ask step: the retrieved scenarios numbered 1..N (that
- * numbering is what citation `index` values reference), the question, and
- * the grounding instructions — answer only from these scenarios, cite with
- * [n], bow out with covered:false when they do not cover it.
+ * Prompt for the ask step: the retrieved scenarios numbered 1..N with their
+ * live scenario ids (the numbering is what citation `index` values reference;
+ * the ids are what citation `scenarioId` must carry — without them a real
+ * model can only ground by coincidence), the question, and the grounding
+ * instructions — answer only from these scenarios, cite with [n] and the
+ * shown id, bow out with covered:false when they do not cover it.
  */
 function buildAskPrompt(question: string, hits: ScenarioSearchHit[]): string {
   const lines = hits.map((hit, position) =>
-    `${position + 1}. [${hit.code}] ${hit.featureName} / ${hit.context}: ${hit.action} → ${hit.outcome}`,
+    `${position + 1}. [${hit.code}] (scenarioId: ${hit.scenarioId}) ${hit.featureName} / ${hit.context}: ${hit.action} → ${hit.outcome}`,
   )
   return [
     'Scenarios from the product spec:',
     '',
     ...lines,
     '',
-    'Answer the question below using only these scenarios. Cite every claim with the scenario number in brackets, like [1]. If the scenarios do not cover the question, set covered to false and make the answer a one-line reason.',
+    'Answer the question below using only these scenarios. Cite every claim with the scenario number in brackets, like [1], and give each citation the {index, scenarioId} pair shown for that scenario. If the scenarios do not cover the question, set covered to false and make the answer a one-line reason.',
     '',
     `Question: ${question}`,
   ].join('\n')

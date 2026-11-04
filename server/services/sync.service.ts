@@ -523,7 +523,12 @@ function nextScenarioOrder(tx: Transaction, featureId: number): number {
   return siblings.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1
 }
 
-/** The prompt one affected feature's update is generated from. */
+/**
+ * The prompt one affected feature's update is generated from. The map request
+ * below is load-bearing: schema optionality never reaches a real model, so a
+ * prompt that skips connections/flow gets them back empty and the maps never
+ * refresh outside mock mode.
+ */
 function buildSyncPrompt(
   name: string,
   description: string,
@@ -543,6 +548,8 @@ function buildSyncPrompt(
     ...patchLines,
     'Produce the scenario revisions (new / changed / fixed / gone) this diff implies for the feature.',
     'changed, fixed and gone entries must carry the matchCode of the stored scenario they address.',
+    'Also refresh the feature\'s maps: connections must list every relation touching this feature, in both directions, each typed as one of leads_to, triggers, depends_on, shares_data, authenticates, notifies, configures, embeds_in, competes_with.',
+    'And return the feature\'s updated flow graph, redrawn to match the changed behavior.',
   ].join('\n')
 }
 
