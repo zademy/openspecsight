@@ -149,7 +149,9 @@ export const AskAnswerSchema = z.object({
 export const ContentBlockSchema = z.object({
   type: z.enum(['heading', 'paragraph', 'list']),
   text: z.string().optional(),
-  items: z.array(z.string()).optional(),
+  items: z.array(
+    z.string().refine(item => item.trim().length > 0, { message: 'List items cannot be blank' }),
+  ).optional(),
 }).refine(
   (block) => block.type === 'list'
     ? (block.items?.length ?? 0) > 0

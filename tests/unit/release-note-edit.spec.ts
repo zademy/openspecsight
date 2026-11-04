@@ -156,6 +156,9 @@ describe('UpdateReleaseNoteSchema', () => {
   test('rejects blocks that cannot render', () => {
     expect(() => UpdateReleaseNoteSchema.parse({ blocks: [{ type: 'paragraph', text: '   ' }] })).toThrow()
     expect(() => UpdateReleaseNoteSchema.parse({ blocks: [{ type: 'list', items: [] }] })).toThrow()
+    expect(() => UpdateReleaseNoteSchema.parse({ blocks: [{ type: 'list', items: ['  '] }] })).toThrow()
+    expect(() => UpdateReleaseNoteSchema.parse({ blocks: [{ type: 'list', items: ['First', ' '] }] })).toThrow()
+    expect(() => UpdateReleaseNoteSchema.parse({ blocks: [{ type: 'list', items: ['First', ' Second'] }] })).not.toThrow()
   })
 })
 
