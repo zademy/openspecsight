@@ -174,6 +174,18 @@ describe('real mode (LLM_MOCK=false)', () => {
     expect(() => createLlmClient()).toThrow(/Unsupported LLM_API_STYLE/)
   })
 
+  test('toBaseUrl strips full endpoint paths users paste from provider docs', async () => {
+    const { toBaseUrl } = await import('../../server/services/llm.service')
+
+    expect(toBaseUrl('https://api.minimax.io/v1/chat/completions')).toBe('https://api.minimax.io/v1')
+    expect(toBaseUrl('https://api.minimax.io/v1/chat/completions/')).toBe('https://api.minimax.io/v1')
+    expect(toBaseUrl('https://api.example.test/v1/messages')).toBe('https://api.example.test/v1')
+    expect(toBaseUrl('https://api.example.test/v1/completions')).toBe('https://api.example.test/v1')
+    expect(toBaseUrl('https://api.example.test/v1/embeddings')).toBe('https://api.example.test/v1')
+    expect(toBaseUrl('https://llm.example.test/v1')).toBe('https://llm.example.test/v1')
+    expect(toBaseUrl('https://api.example.test/v1/messages/all')).toBe('https://api.example.test/v1/messages/all')
+  })
+
   test('generates with the built model and validates the output against the schema', async () => {
     process.env.LLM_MOCK = 'false'
     process.env.LLM_API_STYLE = 'anthropic'

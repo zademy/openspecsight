@@ -161,17 +161,29 @@ function isEnoent(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
 }
 
+/**
+ * Users routinely paste the full endpoint URL from provider docs (e.g.
+ * "https://api.minimax.io/v1/chat/completions" or an Anthropic
+ * ".../messages" URL) into LLM_BASE_URL, but the SDKs expect the base URL
+ * and append their own path — a full URL would double the path and 404.
+ * Strip the known endpoint suffixes so both spellings work.
+ */
+export function toBaseUrl(url: string): string {
+  return url.replace(/\/(?:chat\/completions|messages|completions|embeddings)\/?$/i, '')
+}
+
 function createDefaultModel(env: LlmEnv): LanguageModel {
   if (!env.model) {
     throw new Error('LLM_MODEL is not set; it must name the model to call when LLM_MOCK is false')
   }
   const apiKey = env.apiKey || undefined
+  const baseURL = toBaseUrl(env.baseUrl)
   switch (env.apiStyle) {
     case 'anthropic':
-      return createAnthropic({ baseURL: env.baseUrl, apiKey })(env.model)
+      return createAnthropic({ baseURL, apiKey })(env.model)
     case 'openai':
     case 'openai-compatible':
-      return createOpenAICompatible({ baseURL: env.baseUrl, apiKey, name: 'openspecsight' })(env.model)
+      return createOpenAICompatible({ baseURL, apiKey, name: 'openspecsight' })(env.model)
     default:
       throw new Error(`Unsupported LLM_API_STYLE: ${env.apiStyle} (expected "anthropic", "openai", or "openai-compatible")`)
   }
