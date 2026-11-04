@@ -16,6 +16,22 @@ export type FlowGraph = z.infer<typeof FlowGraphSchema>
 export type FlowNode = FlowGraph['nodes'][number]
 export type FlowEdge = FlowGraph['edges'][number]
 
+/**
+ * One node scenarioCode resolved against the live scenario rows: the flow
+ * diagram's clickable codes. Codes with no matching scenario (deleted or
+ * alien) are simply absent — never an error.
+ */
+export interface ScenarioLink {
+  scenarioCode: string
+  scenarioId: number
+}
+
+/** GET /api/features/:featureId/flow — the feature's flow diagram data. */
+export interface FeatureFlow {
+  graph: FlowGraph
+  scenarioLinks: ScenarioLink[]
+}
+
 export type Connections = z.infer<typeof ConnectionsSchema>
 export type ConnectionType = Connections['connections'][number]['type']
 

@@ -1,4 +1,4 @@
-import type { FeatureDetail, FeatureNode } from '#shared/types'
+import type { FeatureDetail, FeatureFlow, FeatureNode } from '#shared/types'
 
 /**
  * Spec browsing data for the feature tree and feature detail pages: thin
@@ -19,5 +19,10 @@ export function useSpec() {
     return $fetch<FeatureDetail>(`/api/features/${featureId}`, { headers })
   }
 
-  return { featureTree, featureDetail }
+  /** The feature's flow diagram; rejects with a 404 when none is stored. */
+  function featureFlow(featureId: number | string): Promise<FeatureFlow> {
+    return $fetch<FeatureFlow>(`/api/features/${featureId}/flow`, { headers })
+  }
+
+  return { featureTree, featureDetail, featureFlow }
 }

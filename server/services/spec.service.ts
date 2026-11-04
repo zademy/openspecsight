@@ -1,12 +1,14 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import { getDB, type Database } from '../db/client'
-import { annotations, features, scenarioRevisions, scenarios } from '../db/schema'
+import { annotations, features, flows, scenarioRevisions, scenarios } from '../db/schema'
 import { CODE_PREFIX } from './analysis.service'
+import { FlowGraphSchema } from '../../shared/schemas'
 import type {
   AnnotationDTO,
   CreateAnnotationInput,
   CreateScenarioInput,
   FeatureDetail,
+  FeatureFlow,
   FeatureNode,
   ScenarioCategory,
   ScenarioDTO,
@@ -163,6 +165,47 @@ export function getFeatureDetail(featureId: number): FeatureDetail | null {
   }
 
   return { feature, groups }
+}
+
+/**
+ * The feature's flow diagram for the spec page's Flow tab: the stored
+ * graphJson parsed through FlowGraphSchema, plus every node scenarioCode
+ * resolved to this feature's live scenario id (clickable codes). A code with
+ * no live row — a deleted scenario, or one from another feature — is dropped
+ * from the links rather than failing the read. Null when the feature or its
+ * flow row does not exist (the route turns both into a 404; the UI hides the
+ * tab for features the analysis drew no flow for).
+ */
+export function getFeatureFlow(featureId: number): FeatureFlow | null {
+  const db = getDB()
+  if (!db.select({ id: features.id }).from(features).where(eq(features.id, featureId)).get()) {
+    return null
+  }
+  const row = db.select({ graphJson: flows.graphJson }).from(flows).where(eq(flows.featureId, featureId)).get()
+  if (!row) {
+    return null
+  }
+
+  const graph = FlowGraphSchema.parse(JSON.parse(row.graphJson))
+  const codes = graph.nodes
+    .map((node) => node.scenarioCode)
+    .filter((code, index, all): code is string => code !== undefined && all.indexOf(code) === index)
+  const links: FeatureFlow['scenarioLinks'] = []
+  if (codes.length > 0) {
+    const rows = db.select({ id: scenarios.id, code: scenarios.code }).from(scenarios).where(and(
+      eq(scenarios.featureId, featureId),
+      inArray(scenarios.code, codes),
+    )).all()
+    const idByCode = new Map(rows.map((match) => [match.code, match.id]))
+    for (const code of codes) {
+      const scenarioId = idByCode.get(code)
+      if (scenarioId !== undefined) {
+        links.push({ scenarioCode: code, scenarioId })
+      }
+    }
+  }
+
+  return { graph, scenarioLinks: links }
 }
 
 /**
