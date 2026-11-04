@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 /**
  * The Playwright webServer env sets AUTH_PASSWORD=test-pass and
@@ -7,6 +7,17 @@ import { expect, test } from '@playwright/test'
  * regardless.
  */
 test.describe('auth', () => {
+  // Hydration re-mounts the form and resets the password input from state —
+  // wait until the client app owns the DOM, or an early fill gets wiped and
+  // sign-in submits an empty password (the same ruling the other specs'
+  // login helpers carry).
+  async function waitForLoginHydration(page: Page): Promise<void> {
+    await page.waitForFunction(() => {
+      const nuxtApp = (window as unknown as { useNuxtApp?: () => { isHydrating: boolean } }).useNuxtApp
+      return nuxtApp?.().isHydrating === false
+    })
+  }
+
   test('unauthenticated visit to / redirects to /login', async ({ page }) => {
     await page.goto('/')
 
@@ -17,6 +28,7 @@ test.describe('auth', () => {
   test('wrong password shows an error and stays on /login', async ({ page }) => {
     await page.goto('/login')
     await page.getByLabel('Password').fill('wrong-password')
+    await waitForLoginHydration(page)
     await page.getByRole('button', { name: 'Sign in' }).click()
 
     await expect(page.getByText('Incorrect password')).toBeVisible()
@@ -26,6 +38,7 @@ test.describe('auth', () => {
   test('correct password from /login lands on /', async ({ page }) => {
     await page.goto('/login')
     await page.getByLabel('Password').fill('test-pass')
+    await waitForLoginHydration(page)
     await page.getByRole('button', { name: 'Sign in' }).click()
 
     await expect(page).toHaveURL('http://localhost:3000/')
@@ -38,6 +51,7 @@ test.describe('auth', () => {
     await expect(page).toHaveURL(/\/login/)
 
     await page.getByLabel('Password').fill('test-pass')
+    await waitForLoginHydration(page)
     await page.getByRole('button', { name: 'Sign in' }).click()
 
     await expect(page).toHaveURL('http://localhost:3000/')
