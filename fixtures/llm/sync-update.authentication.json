@@ -1,8 +1,8 @@
 {
-  "title": "Session and login hardening",
+  "title": "Tighter sign-in checks",
   "category": "security",
   "highlight": true,
-  "summary": "Login now throttles repeated failures, sessions slide their expiry on activity, and the legacy token endpoint is gone.",
+  "summary": "Sign-in now asks org admins for a second factor before any session is granted, session cookies slide their expiry on activity, and the legacy token endpoint is gone.",
   "featureUpdates": [
     {
       "featureName": "Authentication",
@@ -14,14 +14,14 @@
       "scenarios": [
         {
           "kind": "new",
-          "context": "user on the login page",
-          "action": "fail login five times in a row from the same IP",
-          "outcome": "further attempts get 429 with a Retry-After hint for 15 minutes",
-          "category": "edge"
+          "context": "org admin signing in",
+          "action": "sign in with a valid password when two-factor authentication is enforced for admins",
+          "outcome": "the user is asked for a second-factor code before any session cookie is set",
+          "category": "happy"
         },
         {
           "kind": "changed",
-          "matchCode": "AUTH-H-1",
+          "matchCode": "HP-1",
           "context": "user on the login page",
           "action": "submit the login form with a registered email and the correct password",
           "outcome": "the user lands on the tasks page, the session cookie is set, and its expiry slides forward on each authenticated request",
@@ -29,17 +29,18 @@
         },
         {
           "kind": "fixed",
-          "matchCode": "AUTH-H-2",
+          "matchCode": "ED-1",
           "context": "user with an active session",
-          "action": "open a protected page with a valid cookie from a logged-out device",
+          "action": "open a protected page with an expired session cookie",
           "outcome": "the session is rejected server-side and the user is redirected to the login page",
           "category": "error"
         },
         {
           "kind": "gone",
-          "context": "legacy API clients",
-          "action": "call the removed /api/auth/token endpoint with a legacy token",
-          "outcome": "the API returns 404 and the docs point to session cookies",
+          "matchCode": "ER-3",
+          "context": "user with an active session",
+          "action": "open a protected page with a cookie signed by a foreign key",
+          "outcome": "the foreign-key cookie rejection was removed together with the legacy token endpoint",
           "category": "error"
         }
       ]

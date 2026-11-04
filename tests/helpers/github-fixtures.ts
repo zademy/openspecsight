@@ -28,9 +28,64 @@ export interface StubRepoOptions {
   firstBlobDelayMs?: number
 }
 
+/**
+ * The fixture states a stub repo can serve. `initial` is the plain fixture
+ * set (tasks-tree/-blobs/commits); `after-auth-commit` swaps the commit list
+ * for one with a new head and serves the auth-file compare payload from
+ * `<repo>-compare.json`, so sync pipelines have something to diff. Tests
+ * switch states with POST /_admin/state (see registerStubAdmin).
+ */
+export type StubRepoState = 'initial' | 'after-auth-commit'
+
+const STUB_REPO_STATES: StubRepoState[] = ['initial', 'after-auth-commit']
+const repoStates = new Map<string, StubRepoState>()
+
+/** Points a repo's stub routes at a fixture state. Tests clean up after themselves. */
+export function setStubRepoState(repo: string, state: StubRepoState): void {
+  if (!STUB_REPO_STATES.includes(state)) {
+    throw new Error(`Unknown stub repo state: ${state} (expected one of ${STUB_REPO_STATES.join(', ')})`)
+  }
+  repoStates.set(repo, state)
+}
+
+export function getStubRepoState(repo: string): StubRepoState {
+  return repoStates.get(repo) ?? 'initial'
+}
+
+/**
+ * Registers the test-only admin routes: POST /_admin/state with
+ * `{ repo, state }` switches which fixture set the repo's routes serve;
+ * GET /_admin/state reports the current mapping (defaults omitted).
+ */
+export function registerStubAdmin(): void {
+  registerGithubRoutes(
+    {
+      method: 'GET',
+      pattern: '/_admin/state',
+      handler: () => ({ body: { states: Object.fromEntries(repoStates) } }),
+    },
+    {
+      method: 'POST',
+      pattern: '/_admin/state',
+      handler: (_req, body) => {
+        const parsed = JSON.parse(body || '{}') as { repo?: string, state?: string }
+        if (!parsed.repo || !STUB_REPO_STATES.includes(parsed.state as StubRepoState)) {
+          return {
+            status: 400,
+            body: { error: `expected { repo, state } with state in [${STUB_REPO_STATES.join(', ')}]` },
+          }
+        }
+        setStubRepoState(parsed.repo, parsed.state as StubRepoState)
+        return { body: { repo: parsed.repo, state: getStubRepoState(parsed.repo) } }
+      },
+    },
+  )
+}
+
 /** Registers the full route set for one repository on the GitHub stub. */
 export function registerStubRepo(options: StubRepoOptions): void {
   const { owner, repo } = options
+  const repoName = `${owner}/${repo}`
   const base = `/repos/${owner}/${repo}`
   let blobReads = 0
 
@@ -71,7 +126,26 @@ export function registerStubRepo(options: StubRepoOptions): void {
     {
       method: 'GET',
       pattern: new RegExp(`^${base}/commits$`),
-      handler: async () => ({ body: await loadFixture('commits.json') }),
+      handler: async () => {
+        if (getStubRepoState(repoName) === 'after-auth-commit') {
+          // The compare fixture lists commits oldest→newest; the REST list
+          // endpoint answers newest→oldest.
+          const compare = await loadFixture(`${repo}-compare.json`) as { commits: unknown[] }
+          return { body: [...compare.commits].reverse() }
+        }
+        return { body: await loadFixture('commits.json') }
+      },
+    },
+    {
+      method: 'GET',
+      pattern: new RegExp(`^${base}/compare/[^/]+$`),
+      handler: async () => {
+        if (getStubRepoState(repoName) === 'after-auth-commit') {
+          return { body: await loadFixture(`${repo}-compare.json`) }
+        }
+        // No state pushed (or still initial): nothing ever differs.
+        return { body: { status: 'identical', ahead_by: 0, behind_by: 0, total_commits: 0, commits: [], files: [] } }
+      },
     },
   ]
 

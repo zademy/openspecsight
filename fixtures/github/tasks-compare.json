@@ -1,0 +1,73 @@
+{
+  "url": "https://api.github.com/repos/acme/tasks/compare/fff09124a5b6c7d8e9f0a1b2c3d4e5f60718293a...d4e5f6a708192a3b4c5d6e7f8091a2b3c4d5e6f7",
+  "status": "ahead",
+  "ahead_by": 1,
+  "behind_by": 0,
+  "total_commits": 1,
+  "commits": [
+    {
+      "sha": "fff09124a5b6c7d8e9f0a1b2c3d4e5f60718293a",
+      "commit": {
+        "message": "feat: add tasks module",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com",
+          "date": "2026-10-28T09:15:00Z"
+        },
+        "committer": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com",
+          "date": "2026-10-28T09:15:00Z"
+        }
+      },
+      "parents": []
+    },
+    {
+      "sha": "d4e5f6a708192a3b4c5d6e7f8091a2b3c4d5e6f7",
+      "commit": {
+        "message": "feat: tighten sign-in checks",
+        "author": {
+          "name": "Grace Hopper",
+          "email": "grace@example.com",
+          "date": "2026-11-02T09:30:00Z"
+        },
+        "committer": {
+          "name": "Grace Hopper",
+          "email": "grace@example.com",
+          "date": "2026-11-02T09:30:00Z"
+        }
+      },
+      "parents": [
+        {
+          "sha": "fff09124a5b6c7d8e9f0a1b2c3d4e5f60718293a",
+          "url": "https://api.github.com/repos/acme/tasks/commits/fff09124a5b6c7d8e9f0a1b2c3d4e5f60718293a"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "filename": "server/api/auth/login.post.ts",
+      "status": "modified",
+      "additions": 9,
+      "deletions": 1,
+      "changes": 10,
+      "patch": "@@ -12,6 +12,14 @@ export default defineEventHandler(async (event) => {\n-  const session = await createSession(user.id)\n+  if (await requiresTwoFactor(user)) {\n+    throw createError({ statusCode: 401, statusMessage: 'Second factor required' })\n+  }\n+  const session = await createSession(user.id)\n"
+    },
+    {
+      "filename": "server/utils/session.ts",
+      "status": "modified",
+      "additions": 4,
+      "deletions": 2,
+      "changes": 6,
+      "patch": "@@ -30,9 +30,11 @@ export function touchSession(token: string) {\n-  expiresAt = now + FIXED_TTL\n+  expiresAt = now + SLIDING_TTL\n"
+    },
+    {
+      "filename": "server/api/auth/token.post.ts",
+      "status": "removed",
+      "additions": 0,
+      "deletions": 18,
+      "changes": 18
+    }
+  ]
+}

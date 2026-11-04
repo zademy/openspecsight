@@ -21,7 +21,11 @@ export interface GithubStubRoute {
   method?: string
   /** Exact path or regex matched against the request pathname. */
   pattern: string | RegExp
-  handler: (req: IncomingMessage) => GithubStubResponse | Promise<GithubStubResponse>
+  /**
+   * The drained request body as utf-8 text (empty for GETs), so admin-style
+   * routes can accept JSON payloads.
+   */
+  handler: (req: IncomingMessage, body: string) => GithubStubResponse | Promise<GithubStubResponse>
 }
 
 export interface GithubStubHandle {
@@ -58,17 +62,18 @@ function matchRoute(method: string, pathname: string): GithubStubRoute | undefin
   })
 }
 
-/** Drain the request body so keep-alive sockets stay consistent. */
-function drainBody(req: IncomingMessage): Promise<void> {
+/** Drain the request body and return it as utf-8 text; keeps keep-alive sockets consistent. */
+function drainBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve) => {
-    req.resume()
-    req.on('end', resolve)
-    req.on('error', resolve)
+    const chunks: Buffer[] = []
+    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', () => resolve(''))
   })
 }
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  await drainBody(req)
+  const requestBody = await drainBody(req)
 
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
   const route = matchRoute(req.method ?? 'GET', url.pathname)
@@ -79,7 +84,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   if (route) {
     try {
-      const response = await route.handler(req)
+      const response = await route.handler(req, requestBody)
       status = response.status ?? 200
       body = response.body ?? {}
       extraHeaders = response.headers ?? {}
