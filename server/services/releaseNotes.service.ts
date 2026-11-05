@@ -65,10 +65,10 @@ export class VoiceLimitReachedError extends Error {
 
 /** Error thrown when a voice name is reused within one project. */
 export class VoiceNameTakenError extends Error {
-  constructor(
-    readonly name: string,
-  ) {
-    super(`A voice named "${name}" already exists in this project`)
+  readonly voiceName: string
+  constructor(voiceName: string) {
+    super(`A voice named "${voiceName}" already exists in this project`)
+    this.voiceName = voiceName
     this.name = 'VoiceNameTakenError'
   }
 }
