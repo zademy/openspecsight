@@ -41,7 +41,14 @@ function renderFeature(feature: ExportFeature, level: number, lines: string[]): 
     for (const scenario of group.scenarios) {
       lines.push(`- \`${scenario.code}\` ${scenario.action} → ${scenario.outcome}`)
       for (const note of scenario.annotations) {
-        lines.push(`    > "${note.body}" (${note.author})`)
+        // A body may carry quotes or line breaks: every line stays
+        // inside the blockquote, the author tag closes the last one.
+        const bodyLines = note.body.split('\n')
+        bodyLines.forEach((line, index) => {
+          const open = index === 0 ? '"' : ''
+          const close = index === bodyLines.length - 1 ? `" (${note.author})` : ''
+          lines.push(`    > ${open}${line}${close}`)
+        })
       }
     }
     lines.push('')

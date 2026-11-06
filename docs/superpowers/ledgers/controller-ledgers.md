@@ -63,3 +63,8 @@ Branch `feat/communication` from 71f2a0e; HEAD f8f354f. 10/10 tasks approved; fi
 
 ## Parked for Plan 4 / polish (P3 additions)
 `/api/notes/public/` empty-slug 302+router warnings; loud 404 logs; annotation bodies with quotes/markdown in export format; voices manager SSR wasted fetch + double-Enter job race in modals; "N of M published" summary copy; emailedAt client-fabricated (refetch after send); stub aliases 4→10 (reuse policy); full-flow Saved-label relative-time flake candidate; README:47/64 pre-existing em dashes (authored pre-Plan-3, ruled out of scope).
+
+### Task 8 polish sweep rulings (2026-11-06, branch feat/mcp-api-keys)
+
+Fixed with tests: empty-slug `/api/notes/public/` now answers the unknown-slug 404 (new `index.get.ts` route, e2e pinned, 302 and router warnings gone); multi-line annotation bodies stay inside the export blockquote (unit pinned); double-Enter guards in the three modals (digest modal pinned by a delayed-route e2e counting one POST); "N of M published" honest summary copy (e2e pins none/1-of-1 states); `emailedAt` refetched after send instead of client-stamped (test infeasible: no SMTP and no component-test infra, no new deps allowed). VoicesManager moved under `ClientOnly` (its SSR fetch was discarded).
+Ruled leave: loud 404 logs (nitro logs every error response; silencing needs an unsupported errorhandler override that would hide real errors); stub aliases 4→10 (`fixtureAlias: tasks` reuse IS the policy; each alias exists for fullyParallel state isolation); Saved-label relative-time ("just now" holds 60s, assertion window 10s; pinning the Playwright clock would freeze the autosave debounce too).

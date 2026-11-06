@@ -113,6 +113,11 @@ function toggleChecked(id: number, checked: boolean): void {
 }
 
 async function onDraft() {
+  // Enter and the submit button both land here; a second one while
+  // the first POST is still in flight would start a second job.
+  if (submitting.value) {
+    return
+  }
   submitting.value = true
   error.value = ''
   try {

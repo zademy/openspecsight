@@ -27,6 +27,11 @@ watch(open, (isOpen) => {
 })
 
 async function onSubmit(event: FormSubmitEvent<CreateProjectInput>) {
+  // A second Enter while the create POST is in flight would create
+  // the project twice; the server does not dedupe creates.
+  if (submitting.value) {
+    return
+  }
   submitting.value = true
   try {
     await useProjects().create(event.data)

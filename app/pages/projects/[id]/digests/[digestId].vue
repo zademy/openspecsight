@@ -39,7 +39,9 @@ async function onEmail() {
   try {
     const result = await send(digestId, { force: Boolean(digest.value.emailedAt) })
     if (result.sent) {
-      digest.value.emailedAt = new Date().toISOString()
+      // The server stamps emailedAt after the mail is out (send-then-
+      // stamp); refetch so the badge shows its value, not a local guess.
+      digest.value = await get(digestId)
     } else {
       sendNote.value = result.reason ?? 'The digest did not go out.'
     }

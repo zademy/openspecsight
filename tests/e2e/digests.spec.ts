@@ -210,4 +210,39 @@ test.describe('digests', () => {
       await page.request.delete(`/api/projects/${projectId}`)
     }
   })
+
+  test('a second submit while the create POST is in flight starts one digest job', async ({ page }) => {
+    await login(page)
+    const projectId = await createProject(page, 'Digest Double Submit', 'digests')
+    try {
+      // Hold the create POST open so the second Enter lands while the
+      // first one is still in flight, the exact race the modal guards.
+      let createCalls = 0
+      await page.route(`**/api/projects/${projectId}/digests`, async (route) => {
+        if (route.request().method() !== 'POST') {
+          await route.continue()
+          return
+        }
+        createCalls++
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        await route.continue()
+      })
+
+      await page.goto(`/projects/${projectId}/digests`)
+      await page.getByRole('button', { name: 'New digest' }).click()
+      const dialog = page.getByRole('dialog')
+      await expect(dialog).toBeVisible()
+
+      // The From field is autofocused; Enter submits the form.
+      await dialog.getByLabel('From').press('Enter')
+      await dialog.getByLabel('From').press('Enter')
+
+      // Exactly one request leaves the modal; the honest refusal (no
+      // releases in this range) shows in the dialog either way.
+      await expect.poll(() => createCalls, { timeout: 5_000 }).toBe(1)
+      await expect(dialog.getByRole('alert')).toBeVisible()
+    } finally {
+      await page.request.delete(`/api/projects/${projectId}`)
+    }
+  })
 })

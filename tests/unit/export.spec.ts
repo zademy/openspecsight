@@ -210,6 +210,27 @@ describe('exportProjectMarkdown', () => {
     expect(markdown).toContain('6 features · 13 scenarios · 4 connections')
   })
 
+  test('a multi-line annotation keeps every line inside its quoted block', async () => {
+    const db = getDB()
+    const login = db.select().from(features).where(and(eq(features.projectId, projectId), eq(features.name, 'Login'))).get()
+    const scenario = createManualScenario(login!.id, {
+      context: 'user locked out',
+      action: 'retry after the cooldown',
+      outcome: 'the mailbox shows the reason',
+      category: 'happy',
+    })
+    db.insert(annotations).values({
+      scenarioId: scenario!.id,
+      body: 'First line with "a quote" inside\nand a second line.',
+      author: 'dana',
+      createdAt: '2026-11-04T10:00:00.000Z',
+    }).run()
+
+    const { markdown } = await exportProjectMarkdown(projectId)
+
+    expect(markdown).toContain('    > "First line with "a quote" inside\n    > and a second line." (dana)')
+  })
+
   test('the filename is a kebab-case ASCII slug of the project name', async () => {
     const db = getDB()
     const slugProject = db.insert(projects).values({

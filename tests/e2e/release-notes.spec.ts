@@ -106,6 +106,7 @@ test.describe('release notes', () => {
       // duplicate of the same title while the dialog is closing.
       await expect(page.getByRole('link', { name: 'Tighter sign-in checks' })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByText('Draft', { exact: true })).toBeVisible()
+      await expect(page.getByText('1 note, none published yet')).toBeVisible()
 
       const listResponse = await page.request.get(`/api/projects/${projectId}/release-notes`)
       const notes = (await listResponse.json()) as NoteSummary[]
@@ -156,13 +157,18 @@ test.describe('release notes', () => {
       // 'Unauthorized'); the general API guard and page middleware are
       // untouched.
       expect((await anon.request.get('/api/notes/publicX')).status()).toBe(401)
-      expect((await anon.request.get('/api/notes/public/')).status()).not.toBe(401)
+      expect((await anon.request.get('/api/notes/public/')).status()).toBe(404)
       const webhookProbe = await anon.request.post('/api/webhooks/github')
       expect(webhookProbe.status()).toBe(401)
       expect(webhookProbe.statusText()).toBe('Invalid signature')
       expect((await anon.request.get('/api/projects')).status()).toBe(401)
       await anon.goto(`/projects/${projectId}`)
       await expect(anon).toHaveURL(/\/login/)
+
+      // The list summary counts honestly once the note is out.
+      await page.goto(`/projects/${projectId}/release-notes`)
+      await expect(page.getByText('1 note, 1 of 1 published')).toBeVisible()
+      await page.goto(`/projects/${projectId}/release-notes/${note.id}`)
 
       // Unpublish: back to draft, the public page 404s again.
       await anon.context().close()

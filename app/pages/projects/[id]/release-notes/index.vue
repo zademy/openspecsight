@@ -14,10 +14,16 @@ const { list } = useReleaseNotes()
 const { data: notes, refresh } = await useAsyncData(`release-notes-${projectId}`, () => list(projectId))
 
 const summary = computed(() => {
-  const count = (notes.value ?? []).length
-  return count === 0
-    ? 'Drafted announcements of what shipped, publishable to a public page'
-    : `${count} ${count === 1 ? 'note' : 'notes'}, ${count === 1 && notes.value![0]!.published ? 'published' : 'drafts and published'}`
+  const list = notes.value ?? []
+  if (list.length === 0) {
+    return 'Drafted announcements of what shipped, publishable to a public page'
+  }
+  const published = list.filter((note) => note.published).length
+  const noun = list.length === 1 ? 'note' : 'notes'
+  if (published === 0) {
+    return `${list.length} ${noun}, none published yet`
+  }
+  return `${list.length} ${noun}, ${published} of ${list.length} published`
 })
 
 // --- Drafting polling: no progress endpoint, the list is the progress. ---
@@ -121,6 +127,10 @@ function onNoteStarted(): void {
       title="No release notes yet"
       description="A release note drafts what shipped for the people using the product, and publishes to a shareable page. Create the first one with New release note."
     />
-    <VoicesManager :project-id="projectId" />
+    <!-- Client-only: the manager fetches in setup, and a server-side
+         fetch would be discarded instead of serialized. -->
+    <ClientOnly>
+      <VoicesManager :project-id="projectId" />
+    </ClientOnly>
   </div>
 </template>

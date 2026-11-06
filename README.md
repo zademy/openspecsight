@@ -44,7 +44,7 @@ example `nuxt`/`nuxt`), and click **Run analysis** on the overview.
 One honest caveat about mock mode: the analysis and syncs read their results from
 `fixtures/llm/*.json`, so the spec you get is demo data, not an analysis of the
 repository you pointed at. The GitHub calls are real; the LLM is the only mocked
-part. It exists so you can exercise the whole flow — create, analyze, edit, sync —
+part. It exists so you can exercise the whole flow (create, analyze, edit, sync)
 before configuring a provider.
 
 ## Connecting an LLM provider
@@ -61,7 +61,7 @@ Fill the `LLM_*` keys in `.env` (and set `LLM_MOCK=false` or remove it):
 Any Anthropic-style endpoint works with `LLM_API_STYLE=anthropic`. For an
 OpenAI-compatible provider (vLLM, OpenRouter, local gateways), set
 `LLM_API_STYLE=openai-compatible` and point `LLM_BASE_URL` at its `/v1` root.
-Configuration is env-only — [`.env.example`](./.env.example) is the full key
+Configuration is env-only; [`.env.example`](./.env.example) is the full key
 reference.
 
 For private repositories, set a `GITHUB_TOKEN` (or paste a personal access token
