@@ -215,16 +215,21 @@ test.describe('digests', () => {
     await login(page)
     const projectId = await createProject(page, 'Digest Double Submit', 'digests')
     try {
-      // Hold the create POST open so the second Enter lands while the
-      // first one is still in flight, the exact race the modal guards.
+      // Hold the first create POST open on a signal, not a timer: the
+      // test decides when the response may arrive, so "still in flight"
+      // is a fact under any machine load.
       let createCalls = 0
+      let releaseFirstPost: (() => void) | null = null
+      const firstPostHeld = new Promise<void>((resolve) => {
+        releaseFirstPost = resolve
+      })
       await page.route(`**/api/projects/${projectId}/digests`, async (route) => {
         if (route.request().method() !== 'POST') {
           await route.continue()
           return
         }
         createCalls++
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        await firstPostHeld
         await route.continue()
       })
 
@@ -235,11 +240,15 @@ test.describe('digests', () => {
 
       // The From field is autofocused; Enter submits the form.
       await dialog.getByLabel('From').press('Enter')
+      // Synchronize on the request actually having left: only then is
+      // submitting true and the guard engaged for the second press.
+      await expect.poll(() => createCalls, { timeout: 10_000 }).toBe(1)
       await dialog.getByLabel('From').press('Enter')
 
-      // Exactly one request leaves the modal; the honest refusal (no
-      // releases in this range) shows in the dialog either way.
-      await expect.poll(() => createCalls, { timeout: 5_000 }).toBe(1)
+      // The second Enter ran while the first POST was provably still
+      // open; releasing the response must not produce another request.
+      releaseFirstPost!()
+      await expect.poll(() => createCalls, { timeout: 10_000 }).toBe(1)
       await expect(dialog.getByRole('alert')).toBeVisible()
     } finally {
       await page.request.delete(`/api/projects/${projectId}`)
