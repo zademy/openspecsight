@@ -156,6 +156,66 @@ browser one Markdown file with the whole spec: features with their
 scenarios and the annotations on them, the feature connections, and the
 release history, named after the project.
 
+## API keys and MCP
+
+The app has one login, for you in a browser. Other programs can read the
+spec too: an API key authenticates plain HTTP calls, and an MCP endpoint
+serves MCP clients such as Claude Code or Cursor. Both are read-only by
+design; there is no key or tool that writes anything.
+
+### API keys
+
+Create a key on the **Settings** page under **API keys**: give it a name, and
+the app shows the full `sk_sp_...` key once, in a dialog with a copy button.
+Closing the dialog discards the raw key for good: the server stores only a
+sha256 hash, and the list shows a short prefix. Copy the key before you close.
+
+The key works as a bearer token:
+
+```bash
+curl -H "Authorization: Bearer sk_sp_..." http://localhost:3000/api/projects
+```
+
+A key is accepted on GET (and HEAD) requests to these prefixes only:
+`/api/projects`, `/api/features`, `/api/scenarios`, `/api/scenario-revisions`,
+`/api/releases`, `/api/notes`, `/api/digests`. Anything not listed, and every
+write method, answers 403. Keys are instance-wide: they are not scoped to a
+project. Revoking a key in the Settings list cuts its callers off
+immediately, and each key carries a last-used timestamp that updates on any
+attempt with a live key, including calls the API rejects.
+
+### MCP server
+
+The MCP endpoint is `POST /mcp`. It answers JSON-RPC and speaks both protocol
+eras: the stateless modern protocol (2026-07-28) and, for older clients, the
+legacy `initialize` handshake. Authentication is the same as the API: your
+operator session or a bearer API key. A client config points at it like this:
+
+```json
+{
+  "mcpServers": {
+    "openspecsight": {
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_sp_..."
+      }
+    }
+  }
+}
+```
+
+Six tools are served, all read-only:
+
+- `list_projects`: the indexed projects with their ids, names and owner/repo refs.
+- `list_features`: the feature tree of one project, with scenario counts.
+- `get_feature`: one feature in detail, scenarios and the Mermaid flow diagram included.
+- `search_spec`: full-text search over one project's scenarios and feature names.
+- `recent_changes`: applied scenario revisions, newest first, with the release that carried each.
+- `ask`: answers a question strictly from one project's stored scenarios, with citations.
+
+Keys are stored hashed, never in plain text; they are revocable at any time;
+and everything they can reach is read-only.
+
 ## Scripts
 
 | Command           | Description                                  |
