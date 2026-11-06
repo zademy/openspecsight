@@ -68,3 +68,26 @@ Branch `feat/communication` from 71f2a0e; HEAD f8f354f. 10/10 tasks approved; fi
 
 Fixed with tests: empty-slug `/api/notes/public/` now answers the unknown-slug 404 (new `index.get.ts` route, e2e pinned, 302 and router warnings gone); multi-line annotation bodies stay inside the export blockquote (unit pinned); double-Enter guards in the three modals (digest modal pinned by a delayed-route e2e counting one POST); "N of M published" honest summary copy (e2e pins none/1-of-1 states); `emailedAt` refetched after send instead of client-stamped (test infeasible: no SMTP and no component-test infra, no new deps allowed). VoicesManager moved under `ClientOnly` (its SSR fetch was discarded).
 Ruled leave: loud 404 logs (nitro logs every error response; silencing needs an unsupported errorhandler override that would hide real errors); stub aliases 4→10 (`fixtureAlias: tasks` reuse IS the policy; each alias exists for fullyParallel state isolation); Saved-label relative-time ("just now" holds 60s, assertion window 10s; pinning the Playwright clock would freeze the autosave debounce too).
+
+## Plan 4: MCP server + API keys (2026-11-06, branch feat/mcp-api-keys)
+
+Design: `docs/superpowers/specs/2026-11-06-mcp-api-keys-design.md`. Plan: `docs/superpowers/plans/2026-11-06-openspecsight-mcp-api-keys.md`. All 8 tasks implemented and per-task reviewed; final whole-branch review + one fix wave (e15440e) + scoped re-review APPROVE.
+
+### Controller rulings (Plan 4)
+1. Hand-rolled dual-era MCP protocol (modern 2026-07-28 stateless + legacy `initialize`) instead of the official SDK: zero new runtime deps, tools-only surface, all protocol facts pinned by tests. Extracted from the live spec on 2026-11-06 (ping REMOVED in modern; `-32020` HeaderMismatch; `-32022` UnsupportedProtocolVersion with `data {supported, requested}`; HTTP 404 + `-32601` for unknown modern methods; `ttlMs`/`cacheScope` on tools/list).
+2. Bearer access is a fail-closed GET/HEAD allowlist (7 prefixes). `/api/keys`, mail-status, webhook-status, auth stay session-only: a leaked key must not scout sibling keys or operator config. Future routes are bearer-blocked by default.
+3. Session-first precedence: a valid session cookie wins and any Authorization header is ignored (a stale bearer in operator browser tooling must not break the session). Valid key where keys are not allowed → 403 `API keys are read-only.`; invalid/missing credential → 401.
+4. `last_used_at` stamps on every verification success, including 403 outcomes: last use = last attempt with a live key (signal for the operator; disclosed in the settings hint and README).
+5. API keys are instance-level (single operator owns every project), sha256-hashed, shown exactly once, revocable, never stored or logged in plaintext.
+6. MCP `ask` is ephemeral: it calls the pure `ask()` directly, never `askInConversation()`, so MCP questions leave no conversation rows.
+7. Valid-key-not-allowed status is 403 (authorization failure), not 405 (the method itself is fine; the credential is not).
+8. Plan doc Task 1 recorded `slice(7,11)` for displayPrefix, an off-by-one against design §6.1 (first 4 body chars). Plan kept as-authored (historical record); the implementation and test now follow the design (`slice(6,10)`), fixed in the final review wave.
+9. Production fix (ApiKeyManager `{ keys }` envelope unwrap, caught by T7 e2e as a real /settings SSR 500) rides the `test:` commit d78585d under the one-commit-per-task ruling; disclosed here as a merge note.
+
+### Parked minors (Plan 4, triaged MUST-FIX in the wave or PARK)
+Fixed in the final wave (e15440e): branch-added em dashes in comments (tools.ts, 01.auth.ts, shared/types.ts docs); displayPrefix tautology test replaced with the real contract (43-char base64url body).
+Parked with rulings: error classes without `this.name` parity (instanceof unaffected); reverse Mcp-Name case (header present, body name absent) is spec-correct accept, pinning test would be nice; `resolveProjectRef` ambiguity edge (combined owner/name filter vs strict owner-first; contrived collision); `feature` inputSchema could declare `oneOf` string|integer (handler accepts both); search_spec caps scenarios and features at `limit` each (up to 2x rows, deliberate); README list_projects one-liner omits branches; README 403 sentence relies on context for "valid key"; keys e2e file runs serial (one failure skips three); ask.spec 15s timeout accommodates worker starvation (revisit if runner profile changes); allowlist covers no `/api/notes` private-list route beyond the public one (documented asymmetry, intentional).
+
+### Merge state at close
+HEAD e15440e on feat/mcp-api-keys (11 commits from base 60b6005 / main b74da82). Gates: unit 462/462, e2e 35/35 (production webServer), tsc -b --force clean, lint clean. Zero new runtime dependencies; zero new env vars.
+
