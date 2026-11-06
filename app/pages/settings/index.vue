@@ -52,5 +52,7 @@ const { data: status } = await useAsyncData('webhook-status', () => $fetch<Webho
         Add GITHUB_WEBHOOK_SECRET to .env and restart. Until then the endpoint answers every request with 503 and GitHub marks deliveries as failed.
       </p>
     </section>
+
+    <ApiKeyManager />
   </div>
 </template>
