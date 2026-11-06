@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { login } from './helpers/login'
 
 /**
  * The Playwright webServer env points GITHUB_API_BASE at the stub from
@@ -18,10 +19,7 @@ async function deleteTaskManagerProjects(page: import('@playwright/test').Page):
 
 test.describe('projects', () => {
   test('creating a project lists it without ever exposing the PAT and opens its overview', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByLabel('Password').fill('test-pass')
-    await page.getByRole('button', { name: 'Sign in' }).click()
-    await expect(page).toHaveURL('http://localhost:3000/')
+    await login(page)
 
     await deleteTaskManagerProjects(page)
 
@@ -65,10 +63,7 @@ test.describe('projects', () => {
   })
 
   test('an unknown repository shows a clear error and creates nothing', async ({ page }) => {
-    await page.goto('/login')
-    await page.getByLabel('Password').fill('test-pass')
-    await page.getByRole('button', { name: 'Sign in' }).click()
-    await expect(page).toHaveURL('http://localhost:3000/')
+    await login(page)
 
     await page.getByRole('button', { name: 'New project' }).click()
     await page.getByLabel('Name').fill('Broken')

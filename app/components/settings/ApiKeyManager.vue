@@ -11,7 +11,11 @@ import type { ApiKeySummary, CreatedApiKey } from '#shared/types'
  */
 
 const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
-const { data: keys, refresh, error } = await useAsyncData('api-keys', () => $fetch<{ keys: ApiKeySummary[] }>('/api/keys', { headers: requestHeaders }))
+// Unwrap the `{ keys }` envelope here: every consumer below treats `keys` as
+// the array itself, and the wrapped object crashed SSR with
+// `.filter is not a function` the moment /api/keys answered 200.
+const { data: keys, refresh, error } = await useAsyncData('api-keys', async () =>
+  (await $fetch<{ keys: ApiKeySummary[] }>('/api/keys', { headers: requestHeaders })).keys)
 
 const activeCount = computed(() => (keys.value ?? []).filter((key) => key.revokedAt === null).length)
 

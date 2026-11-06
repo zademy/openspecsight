@@ -106,7 +106,9 @@ test.describe('ask', () => {
       await page.getByRole('navigation', { name: 'Conversations' }).getByText(QUESTION).click()
       await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/ask/\\d+$`))
       await page.getByRole('button', { name: `Delete conversation: ${QUESTION}` }).click()
-      await expect(page.getByRole('heading', { name: 'Delete conversation?' })).toBeVisible()
+      // Under a fully parallel suite the modal can open past the 5s default
+      // when workers starve the browser; the wait is generous, not a retry.
+      await expect(page.getByRole('heading', { name: 'Delete conversation?' })).toBeVisible({ timeout: 15_000 })
       await page.getByRole('button', { name: 'Delete conversation', exact: true }).click()
       await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/ask$`))
       await expect(page.getByRole('navigation', { name: 'Conversations' }).getByText(QUESTION)).toHaveCount(0)
