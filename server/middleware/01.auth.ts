@@ -1,12 +1,21 @@
+import { resolveApiAccess, extractBearerKey } from '../utils/apiAccess'
+import { verifyApiKey } from '../services/keys.service'
+import { getDB } from '../db/client'
+
 /**
- * Guards every /api/** route except the login endpoint itself: a missing or
- * invalid `os_session` cookie gets a 401. Nitro middleware runs before route
- * matching, so this 401s API routes that do not exist yet, too. Page routes
- * are guarded client-side by the global auth middleware instead.
+ * Guards every /api/** route except the login endpoint itself. A request
+ * passes with either a valid `os_session` cookie (full access, any
+ * Authorization header ignored) or a valid `Authorization: Bearer` API key
+ * (read-only GET/HEAD on the allowlisted prefixes, see apiAccess.ts).
+ * Nitro middleware runs before route matching, so this 401s API routes
+ * that do not exist yet, too. Page routes are guarded client-side by the
+ * global auth middleware instead.
  */
 export default defineEventHandler((event) => {
   const path = getRequestURL(event).pathname
-  if (!path.startsWith('/api/') || path === '/api/auth/login') {
+  // /mcp does its own authentication; it never reaches the /api/ gate
+  // below, but the exemption stays explicit so the intent survives.
+  if (!path.startsWith('/api/') || path === '/api/auth/login' || path === '/mcp' || path.startsWith('/mcp/')) {
     return
   }
 
@@ -20,7 +29,17 @@ export default defineEventHandler((event) => {
     return
   }
 
-  if (!verifySessionToken(getCookie(event, SESSION_COOKIE_NAME))) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  const decision = resolveApiAccess({
+    path,
+    method: getMethod(event),
+    sessionValid: verifySessionToken(getCookie(event, SESSION_COOKIE_NAME)),
+    bearerKey: extractBearerKey(getHeader(event, 'authorization')),
+    verify: (key) => verifyApiKey(getDB(), key) !== null,
+  })
+
+  if ('allow' in decision) {
+    return
   }
+
+  throw createError({ statusCode: decision.status, statusMessage: decision.message })
 })
