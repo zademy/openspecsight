@@ -2,8 +2,9 @@ import { extractBearerKey } from '../utils/apiAccess'
 import { SESSION_COOKIE_NAME, verifySessionToken } from '../utils/session'
 import { getDB } from '../db/client'
 import { verifyApiKey } from '../services/keys.service'
+import { buildMcpTools } from '../services/mcp/tools'
 import { handleMcpRequest } from '../services/mcp/server.service'
-import type { McpRequestHeaders, McpTool } from '../services/mcp/protocol'
+import type { McpRequestHeaders } from '../services/mcp/protocol'
 
 /**
  * The MCP endpoint (POST /mcp), outside /api/ so the auth middleware's
@@ -18,9 +19,10 @@ import type { McpRequestHeaders, McpTool } from '../services/mcp/protocol'
  * from the core's status; a 202 (notification) carries an empty body.
  */
 
-// The tool registry lands with the spec tools task; the protocol core is
-// complete and tested against fakes until then.
-const MCP_TOOLS: McpTool[] = []
+// The six read-only spec tools (server/services/mcp/tools.ts): list,
+// detail, search, revisions, ask. All read-only; auth above already
+// stamped lastUsedAt for key callers.
+const MCP_TOOLS = buildMcpTools()
 
 function headerOrUndefined(value: string | undefined): string | undefined {
   return value === undefined || value.length === 0 ? undefined : value
