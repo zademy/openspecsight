@@ -26,11 +26,13 @@ function hashOf(key: string): string {
 }
 
 describe('generateApiKey', () => {
-  test('formats the display prefix from the middle and tail of the key', () => {
+  test('formats the display prefix from the head and tail of the key body', () => {
     const generated = generateApiKey()
 
+    const body = generated.key.slice('sk_sp_'.length)
     expect(generated.key.startsWith('sk_sp_')).toBe(true)
-    expect(generated.displayPrefix).toBe(`sk_sp_${generated.key.slice(7, 11)}…${generated.key.slice(-4)}`)
+    expect(body).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(generated.displayPrefix).toBe(`sk_sp_${body.slice(0, 4)}…${body.slice(-4)}`)
     expect(generated.keyHash).toBe(hashOf(generated.key))
   })
 })

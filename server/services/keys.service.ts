@@ -52,7 +52,7 @@ function hashKey(key: string): string {
 export function generateApiKey(): GeneratedApiKey {
   const key = KEY_PREFIX + randomBytes(32).toString('base64url')
   const keyHash = hashKey(key)
-  const displayPrefix = `${KEY_PREFIX}${key.slice(7, 11)}…${key.slice(-4)}`
+  const displayPrefix = `${KEY_PREFIX}${key.slice(6, 10)}…${key.slice(-4)}`
   return { key, keyHash, displayPrefix }
 }
 

@@ -19,9 +19,8 @@ import type { McpRequestHeaders } from '../services/mcp/protocol'
  * from the core's status; a 202 (notification) carries an empty body.
  */
 
-// The six read-only spec tools (server/services/mcp/tools.ts): list,
-// detail, search, revisions, ask. All read-only; auth above already
-// stamped lastUsedAt for key callers.
+// The six read-only spec tools (server/services/mcp/tools.ts). All
+// read-only; auth above already stamped lastUsedAt for key callers.
 const MCP_TOOLS = buildMcpTools()
 
 function headerOrUndefined(value: string | undefined): string | undefined {

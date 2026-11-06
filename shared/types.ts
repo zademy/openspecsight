@@ -393,7 +393,7 @@ export interface WebhookStatus {
 
 // --- API keys ---
 
-/** GET /api/keys — one operator key row: prefix only, never the secret. */
+/** GET /api/keys: one operator key row, prefix only, never the secret. */
 export interface ApiKeySummary {
   id: string
   name: string
@@ -404,7 +404,7 @@ export interface ApiKeySummary {
 }
 
 /**
- * POST /api/keys — the only response that ever contains a full key.
+ * POST /api/keys: the only response that ever contains a full key.
  * It is returned once at creation and cannot be retrieved afterwards.
  */
 export interface CreatedApiKey {

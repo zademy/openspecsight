@@ -8,12 +8,14 @@ import type { FlowGraph } from '../../../shared/types'
 import type { McpTool } from './protocol'
 
 /**
- * The six read-only spec tools served over /mcp. Every handler resolves its
- * `project` argument through resolveProjectRef (repositories "owner/repo"
- * first, exact project name second) and then only reads: list, detail,
- * search, revisions, ask. Nothing here writes — not even bookkeeping, which
- * already happens once at auth time — and no error message ever carries key
- * material or SQL: messages are fixed text plus ref/feature identifiers.
+ * The six read-only spec tools served over /mcp: list_projects,
+ * list_features, get_feature, search_spec, recent_changes, ask. Every
+ * handler that takes a `project` argument resolves it through
+ * resolveProjectRef (repositories "owner/repo" first, exact project name
+ * second) and then only reads. Nothing here writes, not even bookkeeping
+ * (that already happens once at auth time), and no error message ever
+ * carries key material or SQL: messages are fixed text plus ref/feature
+ * identifiers.
  *
  * Handler failures throw plain Errors; the server core turns them into
  * isError CallToolResults with the message as text, which is the tool-error
