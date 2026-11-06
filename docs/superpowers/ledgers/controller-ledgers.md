@@ -90,4 +90,5 @@ Parked with rulings: error classes without `this.name` parity (instanceof unaffe
 
 ### Merge state at close
 HEAD e15440e on feat/mcp-api-keys (11 commits from base 60b6005 / main b74da82). Gates: unit 462/462, e2e 35/35 (production webServer), tsc -b --force clean, lint clean. Zero new runtime dependencies; zero new env vars.
+10. Post-merge fresh-install verify caught a cold-boot flake in the Plan-2 ask mega-test (30s budget bursts when 35 workers compete on a freshly booted server; reproduced twice only under fresh-install cold boot, green warm). Fixed at cause with a scoped `test.setTimeout(60_000)` and an honest comment (d979acf), matching the file's existing worker-starvation disclosure; verified green under the exact repro condition. Main merged at d979acf, worktree and branch removed.
 
