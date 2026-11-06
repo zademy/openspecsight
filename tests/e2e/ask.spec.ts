@@ -54,6 +54,11 @@ async function createAnalyzedProject(page: Page): Promise<number> {
 
 test.describe('ask', () => {
   test('bar, answer, citations, follow-up, refusal and delete work together', async ({ page }) => {
+    // The whole flow builds a project from a cold analysis; on the first
+    // suite run after server boot every step competes with 34 sibling
+    // workers for CPU and the default 30s budget bursts right before
+    // cleanup. The wider budget covers that cold boot, it is not a retry.
+    test.setTimeout(60_000)
     await login(page)
     const projectId = await createAnalyzedProject(page)
     const scenario = await wrongPasswordScenario(page, projectId)
