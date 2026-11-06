@@ -22,6 +22,13 @@
       "when": 1793810413323,
       "tag": "0002_eager_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793962480087,
+      "tag": "0003_lethal_saracen",
+      "breakpoints": true
     }
   ]
 }

@@ -167,3 +167,15 @@ export const releaseNotes = sqliteTable('releaseNotes', {
   createdAt: text('createdAt').notNull(),
   publishedAt: text('publishedAt'),
 })
+
+// Operator API keys: the raw key is shown once at creation and only its
+// sha256 hash is stored, so revocation and lookup never need the secret.
+export const apiKeys = sqliteTable('apiKeys', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  keyHash: text('keyHash').notNull().unique(),
+  displayPrefix: text('displayPrefix').notNull(),
+  createdAt: text('createdAt').notNull(),
+  lastUsedAt: text('lastUsedAt'),
+  revokedAt: text('revokedAt'),
+})
